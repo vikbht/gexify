@@ -15,9 +15,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const supportLevel = document.getElementById('support-level');
     const resistanceLevel = document.getElementById('resistance-level');
     const flipLevel = document.getElementById('flip-level');
+    const netDex = document.getElementById('net-dex');
+    const dexToggleBtn = document.getElementById('dex-toggle');
 
-    let gexChart = null;      // Chart.js instance for GEX bar chart
+    let gexChart = null;       // Chart.js instance for GEX bar chart
     let sparklineChart = null; // Chart.js instance for intraday price sparkline
+    let dexVisible = true;     // Whether the DEX overlay is currently shown
+
+    // DEX toggle button — show/hide the third dataset (index 2)
+    dexToggleBtn.addEventListener('click', () => {
+        if (!gexChart) return;
+        dexVisible = !dexVisible;
+        gexChart.data.datasets[2].hidden = !dexVisible;
+        gexChart.update();
+        dexToggleBtn.classList.toggle('active', dexVisible);
+    });
 
     // Fetch expirations when user types a ticker
     tickerInput.addEventListener('blur', async () => {
@@ -111,6 +123,17 @@ document.addEventListener('DOMContentLoaded', () => {
         // Update GEX Flip badge (orange) — null if no zero-crossing found in filtered window
         flipLevel.textContent = data.gex_flip_strike ? `$${data.gex_flip_strike.toFixed(2)}` : 'N/A';
 
+        // Update Net DEX badge (purple)
+        // Sum all total_dex values and express in billions for readability
+        const billionScale = 1_000_000_000;
+        if (data.dex_data && data.dex_data.length > 0) {
+            const totalDex = data.dex_data.reduce((sum, d) => sum + d.total_dex, 0);
+            const sign = totalDex >= 0 ? '+' : '';
+            netDex.textContent = `${sign}${(totalDex / billionScale).toFixed(2)}B`;
+        } else {
+            netDex.textContent = 'N/A';
+        }
+
         // Render GEX chart immediately; defer sparkline one frame so the
         // results panel is fully visible and the canvas has real pixel dimensions.
         renderChart(data);
@@ -167,9 +190,17 @@ document.addEventListener('DOMContentLoaded', () => {
         supportLevel.textContent = supportStrike ? `$${supportStrike.toFixed(2)}` : 'N/A';
         resistanceLevel.textContent = resistanceStrike ? `$${resistanceStrike.toFixed(2)}` : 'N/A';
 
-        // 2. Render GEX Chart — pass flipStrike so the plugin can draw it
+        // 2. Build DEX line data aligned to the same filtered strike window
+        // DEX is in raw dollars — scale to billions on a separate axis
+        const dexByStrike = {};
+        if (data.dex_data) {
+            data.dex_data.forEach(d => { dexByStrike[d.strike] = d.total_dex; });
+        }
+        const dexLineData = labels.map(strike => (dexByStrike[strike] ?? 0) / billionScale);
+
+        // 3. Render GEX Chart — pass flipStrike and dexLineData
         const flipStrike = data.gex_flip_strike;
-        renderGexChart(ctx, labels, callGexData, putGexData, spotPrice, flipStrike, gridColor, textColor);
+        renderGexChart(ctx, labels, callGexData, putGexData, dexLineData, spotPrice, flipStrike, gridColor, textColor);
 
         // 4. Update Insights Banner
         const localGex = filteredData.reduce((acc, d) => acc + d.total_gex, 0) / billionScale;
@@ -193,29 +224,52 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function renderGexChart(ctx, labels, callGexData, putGexData, spotPrice, flipStrike, gridColor, textColor) {
+    function renderGexChart(ctx, labels, callGexData, putGexData, dexLineData, spotPrice, flipStrike, gridColor, textColor) {
         gexChart = new Chart(ctx, {
             type: 'bar',
             data: {
                 labels: labels,
                 datasets: [
                     {
+                        // Dataset 0: Call GEX (green bars, positive side)
                         label: 'Call GEX (Positive)',
                         data: callGexData,
-                        backgroundColor: 'rgba(34, 197, 94, 0.7)', // vivid green
+                        backgroundColor: 'rgba(34, 197, 94, 0.7)',
                         borderColor: '#22c55e',
                         borderWidth: 1,
                         borderRadius: 4,
-                        hoverBackgroundColor: 'rgba(34, 197, 94, 1)'
+                        hoverBackgroundColor: 'rgba(34, 197, 94, 1)',
+                        yAxisID: 'y',
+                        order: 2
                     },
                     {
+                        // Dataset 1: Put GEX (red bars, negative side)
                         label: 'Put GEX (Negative)',
                         data: putGexData,
-                        backgroundColor: 'rgba(239, 68, 68, 0.7)', // vivid red
+                        backgroundColor: 'rgba(239, 68, 68, 0.7)',
                         borderColor: '#ef4444',
                         borderWidth: 1,
                         borderRadius: 4,
-                        hoverBackgroundColor: 'rgba(239, 68, 68, 1)'
+                        hoverBackgroundColor: 'rgba(239, 68, 68, 1)',
+                        yAxisID: 'y',
+                        order: 2
+                    },
+                    {
+                        // Dataset 2: Net DEX line (purple) on secondary right Y-axis
+                        // Renders on top of bars (order: 1) so it stays readable at all times
+                        label: 'Net DEX',
+                        data: dexLineData,
+                        type: 'line',
+                        borderColor: '#a78bfa',
+                        borderWidth: 2.5,
+                        pointRadius: 0,
+                        pointHoverRadius: 5,
+                        pointHoverBackgroundColor: '#a78bfa',
+                        tension: 0.4,
+                        fill: false,
+                        yAxisID: 'y1',  // right-side secondary axis
+                        order: 1,
+                        hidden: !dexVisible  // respects toggle state
                     }
                 ]
             },
@@ -247,7 +301,15 @@ document.addEventListener('DOMContentLoaded', () => {
                                     label += ': ';
                                 }
                                 if (context.parsed.y !== null) {
-                                    label += `${context.parsed.y.toFixed(2)}B`;
+                                    // DEX line (dataset index 2) — show with 'B' suffix
+                                    // GEX bars (dataset indices 0 & 1) — same format
+                                    const val = context.parsed.y;
+                                    const sign = val > 0 ? '+' : '';
+                                    if (context.datasetIndex === 2) {
+                                        label += `${sign}${val.toFixed(2)}B`;
+                                    } else {
+                                        label += `${val.toFixed(2)}B`;
+                                    }
                                 }
                                 return label;
                             }
@@ -314,6 +376,23 @@ document.addEventListener('DOMContentLoaded', () => {
                                 size: 14,
                                 weight: '500'
                             }
+                        }
+                    },
+                    // Secondary right-side axis for DEX line
+                    // No grid lines (would duplicate left GEX grid) — only ticks
+                    y1: {
+                        position: 'right',
+                        display: dexVisible, // hide axis when DEX overlay is toggled off
+                        grid: { drawOnChartArea: false },
+                        ticks: {
+                            color: '#a78bfa',   // purple to match the DEX line
+                            callback: value => value === 0 ? '0B' : value.toFixed(2) + 'B'
+                        },
+                        title: {
+                            display: true,
+                            text: 'Delta Exposure ($ Billions)',
+                            color: '#a78bfa',
+                            font: { size: 13, weight: '500' }
                         }
                     }
                 }

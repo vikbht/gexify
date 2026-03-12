@@ -474,3 +474,43 @@ body {
     width: 100% !important;
     height: 100% !important;
 }
+
+/* --- DEX Badge & Swatch --- */
+.dex-badge .value {
+    color: #a78bfa; /* purple — distinct from all other badge colours */
+}
+
+.dex-swatch {
+    background: #a78bfa;
+}
+
+/* --- Chart Controls (DEX toggle) --- */
+.chart-controls {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 0.5rem;
+}
+
+.dex-toggle-btn {
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    padding: 0.3rem 0.85rem;
+    border-radius: 99px;          /* pill shape */
+    border: 1.5px solid #a78bfa;
+    background: transparent;
+    color: #a78bfa;
+    cursor: pointer;
+    transition: background 0.18s, color 0.18s;
+}
+
+/* Active state: filled purple pill */
+.dex-toggle-btn.active {
+    background: rgba(167, 139, 250, 0.18);
+    color: #c4b5fd;
+}
+
+/* Hover */
+.dex-toggle-btn:hover {
+    background: rgba(167, 139, 250, 0.28);
+}

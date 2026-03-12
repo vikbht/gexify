@@ -70,6 +70,10 @@
                             <span class="label">GEX Flip:</span>
                             <span class="value" id="flip-level">N/A</span>
                         </div>
+                        <div class="info-badge dex-badge">
+                            <span class="label">Net DEX:</span>
+                            <span class="value" id="net-dex">N/A</span>
+                        </div>
 
                         <!-- Integrated Insight Banner -->
                         <div id="insight-banner" class="insight-banner hidden"
@@ -82,6 +86,13 @@
                                     strategy...</p>
                             </div>
                         </div>
+                    </div>
+
+                    <!-- DEX Toggle Button -->
+                    <div class="chart-controls">
+                        <button id="dex-toggle" class="dex-toggle-btn active" title="Toggle Delta Exposure overlay">
+                            δ DEX Overlay
+                        </button>
                     </div>
 
                     <div class="chart-container">
@@ -105,13 +116,17 @@
                             <div class="color-swatch put-swatch"></div>
                             <span><strong>Negative GEX (Puts)</strong></span>
                         </div>
+                        <div class="legend-item">
+                            <div class="color-swatch dex-swatch"></div>
+                            <span><strong>Net DEX Line</strong></span>
+                        </div>
                     </div>
                 </div>
             </section>
         </main>
     </div>
 
-    <script src="app.js?v=2"></script>
+    <script src="app.js?v=3"></script>
 </body>
 
 </html>
