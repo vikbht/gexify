@@ -45,11 +45,14 @@
                         </select>
                     </div>
                     <div class="input-group auto-refresh-group">
-                        <label for="auto-refresh-toggle">Auto-Refresh (1m)</label>
-                        <label class="switch">
-                            <input type="checkbox" id="auto-refresh-toggle">
-                            <span class="slider round"></span>
-                        </label>
+                        <div class="auto-refresh-header">
+                            <label for="auto-refresh-toggle">Auto-Refresh (1m)</label>
+                            <label class="switch">
+                                <input type="checkbox" id="auto-refresh-toggle">
+                                <span class="slider round"></span>
+                            </label>
+                        </div>
+                        <span id="last-refreshed" class="last-refreshed hidden"></span>
                     </div>
                     <button type="submit" id="analyze-btn" class="primary-btn">
                         <span>Analyze GEX</span>
@@ -154,7 +157,7 @@
         </main>
     </div>
 
-    <script src="app.js?v=8"></script>
+    <script src="app.js?v=9"></script>
 </body>
 
 </html>

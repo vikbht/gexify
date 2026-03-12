@@ -623,6 +623,33 @@ input:checked + .slider:before {
 }
 
 /* --- Intraday Sparkline --- */
+.expiration-group,
+.auto-refresh-group {
+    border-left: 1px solid var(--panel-border);
+    padding-left: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.auto-refresh-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.last-refreshed {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 4px;
+    font-style: italic;
+    opacity: 0.8;
+}
+
+.last-refreshed.hidden {
+    display: none;
+}
+
 .sparkline-section {
     border-top: 1px solid var(--panel-border);
     padding-top: 1.25rem;

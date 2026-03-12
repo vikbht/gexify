@@ -22,6 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Auto-Refresh Elements
     const autoRefreshToggle = document.getElementById('auto-refresh-toggle');
     const refreshGroup = document.querySelector('.auto-refresh-group');
+    const lastRefreshedSpan = document.getElementById('last-refreshed');
     
     let gexChart = null;       // Chart.js instance for GEX bar chart
     let sparklineChart = null; // Chart.js instance for intraday price sparkline
@@ -316,6 +317,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const insightTitle = document.getElementById('insight-title');
         const insightText = document.getElementById('insight-text');
         const insightIcon = document.getElementById('insight-icon');
+        const lastRefreshedSpan = document.getElementById('last-refreshed');
 
         insightBanner.className = 'insight-banner'; // reset classes
         if (localGex >= 0) {
@@ -329,6 +331,12 @@ document.addEventListener('DOMContentLoaded', () => {
             insightTitle.textContent = `Market Regime: Negative GEX (${localGex.toFixed(2)}B)`;
             insightText.innerHTML = "<strong>Market Makers amplifying volatility.</strong><br/>Expect large directional moves. <span style='color: #4ade80;'>Buy Calls on breakout</span>. <span style='color: #f87171;'>Buy Puts on breakdown</span>.";
         }
+
+        // --- Last Refreshed Timestamp ---
+        const now = new Date();
+        const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        lastRefreshedSpan.textContent = `Last Refreshed: ${timeString}`;
+        lastRefreshedSpan.classList.remove('hidden');
     }
 
     function renderGexChart(ctx, labels, callGexData, putGexData, dexLineData, spotPrice, flipStrike, gridColor, textColor) {
