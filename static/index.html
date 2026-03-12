@@ -32,7 +32,14 @@
                             autocomplete="off" spellcheck="false" maxlength="5">
                     </div>
                     <div class="input-group expiration-group">
-                        <label for="expiration-select">Options Expiration (Optional):</label>
+                        <label>Data Scope:</label>
+                        <div class="toggle-pills">
+                            <input type="radio" id="mode-single" name="view_mode" value="single" checked>
+                            <label for="mode-single">Single Expiry</label>
+                            
+                            <input type="radio" id="mode-total" name="view_mode" value="total">
+                            <label for="mode-total">Total Market</label>
+                        </div>
                         <select id="expiration-select" disabled>
                             <option value="">Auto-select Nearest</option>
                         </select>
@@ -147,7 +154,7 @@
         </main>
     </div>
 
-    <script src="app.js?v=7"></script>
+    <script src="app.js?v=8"></script>
 </body>
 
 </html>

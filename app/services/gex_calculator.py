@@ -7,7 +7,13 @@ from cachetools import cached, TTLCache
 import concurrent.futures
 from app.models.gex import GexResponse, GexDataPoint, DexDataPoint, ExpirationResponse, HistoricalPriceItem, ExpirationDetail
 
-# --- Black-Scholes Gamma Calculation ---
+# --- Fast Vectorized Gamma Calculation ---
+def calculate_gamma_vectorized(S, K, T, r, sigma):
+    """Numpy vectorized computation for computing thousands of strikes instantly."""
+    d1 = (np.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
+    return norm.pdf(d1) / (S * sigma * np.sqrt(T))
+
+# --- Standard Black-Scholes Gamma Calculation ---
 def calculate_gamma(S, K, T, r, sigma):
     """
     Computes the Black-Scholes Gamma for a single option contract.
@@ -212,6 +218,161 @@ def fetch_chain_sync(ticker_symbol: str, target_expiration: str = None):
     print(f"Fetching {ticker_symbol} options chain for expiration: {target_exp}")
     chain = ticker.option_chain(target_exp)
     return chain.calls, chain.puts, target_exp
+
+
+# --- Total Market Calculation ---
+def compute_total_market_gex(ticker_symbol: str, spot_price: float, historical_prices: list) -> GexResponse:
+    """
+    Computes aggregated GEX and DEX for ALL expirations simultaneously.
+    Uses concurrent fetching and Numpy vectorized formulas for speed.
+    """
+    ticker = yf.Ticker(ticker_symbol)
+    raw_expirations = getattr(ticker, 'options', [])
+    if not raw_expirations:
+        raise ValueError(f"No options data found for {ticker_symbol}")
+
+    today = datetime.datetime.today().date()
+    r = 0.04
+
+    def process_chain(exp_date):
+        try:
+            chain = ticker.option_chain(exp_date)
+            calls, puts = chain.calls, chain.puts
+            
+            expiration_dt = datetime.datetime.strptime(exp_date, "%Y-%m-%d").date()
+            if expiration_dt == today:
+                days_to_expiration = 0.5
+            else:
+                days_to_expiration = (expiration_dt - today).days
+
+            T = max(days_to_expiration / 365.25, 0.001)
+            
+            # --- Vectorized Calls ---
+            if not calls.empty:
+                valid_calls = calls[calls['openInterest'] > 0].copy()
+                if not valid_calls.empty:
+                    K = valid_calls['strike'].values
+                    sigma = valid_calls['impliedVolatility'].values
+                    oi = valid_calls['openInterest'].values
+                    
+                    gamma = calculate_gamma_vectorized(spot_price, K, T, r, sigma)
+                    valid_calls['call_gex'] = gamma * oi * 100 * spot_price
+                    
+                    # For total DEX approximation, we use standard d1 CDF.
+                    # This is less precise in large batches but sufficiently accurate for regime profiling.
+                    d1_c = (np.log(spot_price / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
+                    call_delta = norm.cdf(d1_c)
+                    valid_calls['call_dex'] = call_delta * oi * 100 * spot_price
+                else:
+                    valid_calls['call_gex'] = 0.0
+                    valid_calls['call_dex'] = 0.0
+            else:
+                calls['call_gex'] = 0.0
+                calls['call_dex'] = 0.0
+                valid_calls = calls
+
+            # --- Vectorized Puts ---
+            if not puts.empty:
+                valid_puts = puts[puts['openInterest'] > 0].copy()
+                if not valid_puts.empty:
+                    K = valid_puts['strike'].values
+                    sigma = valid_puts['impliedVolatility'].values
+                    oi = valid_puts['openInterest'].values
+                    
+                    gamma = calculate_gamma_vectorized(spot_price, K, T, r, sigma)
+                    valid_puts['put_gex'] = gamma * oi * 100 * spot_price * -1
+                    
+                    d1_p = (np.log(spot_price / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
+                    put_delta = norm.cdf(d1_p) - 1.0
+                    valid_puts['put_dex'] = put_delta * oi * 100 * spot_price
+                else:
+                    valid_puts['put_gex'] = 0.0
+                    valid_puts['put_dex'] = 0.0
+            else:
+                puts['put_gex'] = 0.0
+                puts['put_dex'] = 0.0
+                valid_puts = puts
+                
+            dfs = []
+            if not valid_calls.empty:
+                dfs.append(valid_calls[['strike', 'call_gex', 'call_dex']])
+            if not valid_puts.empty:
+                dfs.append(valid_puts[['strike', 'put_gex', 'put_dex']])
+                
+            if not dfs: return pd.DataFrame(columns=['strike', 'call_gex', 'call_dex', 'put_gex', 'put_dex'])
+            
+            if len(dfs) == 2:
+                res = pd.merge(dfs[0], dfs[1], on='strike', how='outer').fillna(0)
+            else:
+                res = dfs[0].copy()
+                for col in ['call_gex', 'call_dex', 'put_gex', 'put_dex']:
+                    if col not in res.columns: res[col] = 0.0
+                
+            return res
+        except Exception as e:
+            return pd.DataFrame(columns=['strike', 'call_gex', 'call_dex', 'put_gex', 'put_dex'])
+
+    # Fetch and compute all chains concurrently
+    with concurrent.futures.ThreadPoolExecutor(max_workers=30) as executor:
+        results = list(executor.map(process_chain, raw_expirations))
+        
+    all_chains = [df for df in results if not df.empty]
+    if not all_chains:
+        raise ValueError("Could not aggregate total market data.")
+        
+    # Combine and sum by strike
+    combined_df = pd.concat(all_chains, ignore_index=True)
+    agg_df = combined_df.groupby('strike').sum().reset_index().sort_values('strike')
+    
+    # Calculate Totals
+    agg_df['total_gex'] = agg_df['call_gex'] + agg_df['put_gex']
+    agg_df['total_dex'] = agg_df['call_dex'] + agg_df['put_dex']
+    
+    # Format into Response Model
+    gex_data = []
+    dex_data = []
+    cumulative_gex = 0.0
+    gex_flip_strike = None
+    cumulative_dex = 0.0
+    dex_flip_strike = None
+    
+    for _, row in agg_df.iterrows():
+        K = row['strike']
+        
+        # Build GEX Model
+        g_data = GexDataPoint(
+            strike=K, call_gex=row['call_gex'], put_gex=row['put_gex'], total_gex=row['total_gex']
+        )
+        gex_data.append(g_data)
+        
+        # Build DEX Model
+        d_data = DexDataPoint(
+            strike=K, call_dex=row['call_dex'], put_dex=row['put_dex'], total_dex=row['total_dex']
+        )
+        dex_data.append(d_data)
+        
+        # Check Flips
+        if spot_price * 0.5 <= K <= spot_price * 1.5:
+            prev_cum_gex = cumulative_gex
+            cumulative_gex += row['total_gex']
+            if prev_cum_gex < 0 and cumulative_gex >= 0 and gex_flip_strike is None:
+                gex_flip_strike = K
+                
+            prev_cum_dex = cumulative_dex
+            cumulative_dex += row['total_dex']
+            if prev_cum_dex < 0 and cumulative_dex >= 0 and dex_flip_strike is None:
+                dex_flip_strike = K
+
+    return GexResponse(
+        ticker=ticker_symbol,
+        spot_price=spot_price,
+        expiration_date="Total Market (All Expirations)",
+        gex_data=gex_data,
+        dex_data=dex_data,
+        historical_prices=historical_prices,
+        gex_flip_strike=gex_flip_strike,
+        dex_flip_strike=dex_flip_strike
+    )
 
 
 # --- Pure Calculation Logic ---

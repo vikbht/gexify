@@ -12,12 +12,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const spotPriceDisplay = document.getElementById('spot-price-display');
     const expirationDisplay = document.getElementById('expiration-display');
     const expirationSelect = document.getElementById('expiration-select');
+    const viewModeRadios = document.getElementsByName('view_mode');
     const supportLevel = document.getElementById('support-level');
     const resistanceLevel = document.getElementById('resistance-level');
     const flipLevel = document.getElementById('flip-level');
     const netDex = document.getElementById('net-dex');
     const dexToggleBtn = document.getElementById('dex-toggle');
 
+    // Auto-Refresh Elements
+    const autoRefreshToggle = document.getElementById('auto-refresh-toggle');
+    const refreshGroup = document.querySelector('.auto-refresh-group');
+    
     let gexChart = null;       // Chart.js instance for GEX bar chart
     let sparklineChart = null; // Chart.js instance for intraday price sparkline
     let autoRefreshInterval = null; // Keeps track of the setInterval ID
@@ -37,6 +42,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const ticker = tickerInput.value.trim().toUpperCase();
         if (!ticker || ticker.length < 1) return;
 
+        // Check if Total Market mode is active. If so, don't re-enable the dropdown.
+        const isTotalMarket = Array.from(viewModeRadios).find(r => r.checked)?.value === 'total';
+        
         try {
             const response = await fetch(`/api/gex/${ticker}/expirations`);
             const data = await response.json();
@@ -63,7 +71,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     option.textContent = `${emoji} ${expObj.date} (${formattedGex})`;
                     expirationSelect.appendChild(option);
                 });
-                expirationSelect.disabled = false;
+                if (!isTotalMarket) {
+                    expirationSelect.disabled = false;
+                }
             } else {
                 expirationSelect.innerHTML = '<option value="" disabled selected>No Dates Found</option>';
                 expirationSelect.disabled = true;
@@ -81,8 +91,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- Auto-Refresh Logic ---
-    const autoRefreshToggle = document.getElementById('auto-refresh-toggle');
-    const refreshGroup = document.querySelector('.auto-refresh-group');
     
     // Hide toggle initially until a successful search happens
     refreshGroup.style.display = 'none';
@@ -115,6 +123,25 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         await fetchGexData(false);
     });
+    
+    // View Mode Toggle Logic
+    viewModeRadios.forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            if (e.target.value === 'total') {
+                expirationSelect.disabled = true;
+            } else {
+                // Only enable if there are options and a ticker is entered
+                if (expirationSelect.options.length > 0 && expirationSelect.options[0].value !== "") {
+                    expirationSelect.disabled = false;
+                }
+            }
+            
+            // Auto-trigger analyze if a ticker is already entered and valid
+            if (tickerInput.value.trim().length > 0) {
+                fetchGexData(false);
+            }
+        });
+    });
 
     async function fetchGexData(isAutoRefresh) {
         const ticker = tickerInput.value.trim().toUpperCase();
@@ -129,8 +156,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
+            const viewMode = Array.from(viewModeRadios).find(r => r.checked)?.value || 'single';
             const selectedExp = expirationSelect.value;
-            const queryParams = selectedExp && !expirationSelect.disabled ? `?expiration=${selectedExp}` : '';
+            
+            let queryParams = `?view_mode=${viewMode}`;
+            if (viewMode === 'single' && selectedExp && !expirationSelect.disabled) {
+                queryParams += `&expiration=${selectedExp}`;
+            }
+
             const response = await fetch(`/api/gex/${ticker}${queryParams}`);
             const data = await response.json();
 
