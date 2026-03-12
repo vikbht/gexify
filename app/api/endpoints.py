@@ -1,5 +1,5 @@
 import asyncio
-from fastapi import APIRouter, HTTPException, Path
+from fastapi import APIRouter, HTTPException, Path, Query
 from app.models.gex import GexResponse, ExpirationResponse
 from app.services.gex_calculator import fetch_history_sync, fetch_chain_sync, compute_gex_profile, fetch_term_structure, compute_total_market_gex
 import logging
@@ -28,9 +28,10 @@ async def get_expirations(ticker: str = Path(..., pattern="^[A-Za-z]{1,5}$", des
 
 @router.get("/gex/{ticker}", response_model=GexResponse)
 async def get_gex(
-    ticker: str = Path(..., pattern="^[A-Za-z]{1,5}$", description="Stock ticker symbol"), 
-    expiration: str = None,
-    view_mode: str = "single"
+    ticker: str = Path(..., pattern="^[A-Za-z]{1,5}$", description="Stock ticker symbol"),
+    expiration: str = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$", description="Expiration date YYYY-MM-DD"),
+    view_mode: str = "single",
+    r: float = Query(0.04, ge=0.0, le=0.2, description="Risk-free rate (annualized, e.g. 0.04 for 4%)"),
 ):
     """
     Return the full Gamma Exposure (GEX) profile for a ticker.
@@ -39,7 +40,7 @@ async def get_gex(
     If view_mode == "total", it calculates GEX for all upcoming expirations concurrently.
     """
     ticker = ticker.upper()  # normalise to uppercase
-    logger.info(f"Fetching GEX for {ticker} (Exp: {expiration}, Mode: {view_mode})")
+    logger.info(f"Fetching GEX for {ticker} (Exp: {expiration}, Mode: {view_mode}, r: {r})")
 
     loop = asyncio.get_running_loop()
     
@@ -51,9 +52,9 @@ async def get_gex(
             
             # Run the heavy concurrent array-math function in the process pool
             response = await loop.run_in_executor(
-                None, 
-                compute_total_market_gex, 
-                ticker, spot_price, historical_prices
+                None,
+                compute_total_market_gex,
+                ticker, spot_price, historical_prices, r
             )
             return response
             
@@ -65,9 +66,9 @@ async def get_gex(
             (spot_price, historical_prices), (calls, puts, target_exp) = await asyncio.gather(history_task, chain_task)
             
             response = await loop.run_in_executor(
-                None, 
-                compute_gex_profile, 
-                ticker, spot_price, historical_prices, calls, puts, target_exp
+                None,
+                compute_gex_profile,
+                ticker, spot_price, historical_prices, calls, puts, target_exp, r
             )
             return response
 

@@ -88,7 +88,7 @@ def fetch_term_structure(ticker_symbol: str) -> ExpirationResponse:
                 T = max(days_to_expiration / 365.25, 0.001)
                 
                 total_gex = 0.0
-                
+
                 # Sum Call GEX
                 if not calls.empty:
                     for _, row in calls.iterrows():
@@ -96,11 +96,12 @@ def fetch_term_structure(ticker_symbol: str) -> ExpirationResponse:
                         sigma = row['impliedVolatility']
                         oi = row['openInterest']
                         if pd.isna(oi) or oi == 0: continue
-                        
+                        if pd.isna(sigma) or sigma <= 0: continue
+
                         gamma = calculate_gamma(spot_price, K, T, r, sigma)
                         call_gex = gamma * oi * 100 * spot_price
                         total_gex += call_gex
-                
+
                 # Sum Put GEX
                 if not puts.empty:
                     for _, row in puts.iterrows():
@@ -108,10 +109,9 @@ def fetch_term_structure(ticker_symbol: str) -> ExpirationResponse:
                         sigma = row['impliedVolatility']
                         oi = row['openInterest']
                         if pd.isna(oi) or oi == 0: continue
-                        
+                        if pd.isna(sigma) or sigma <= 0: continue
+
                         gamma = calculate_gamma(spot_price, K, T, r, sigma)
-                        # Dealers sell puts -> short gamma. MMs who bought them are long gamma.
-                        # Put GEX is negative impact.
                         put_gex = gamma * oi * 100 * spot_price * -1
                         total_gex += put_gex
                 
@@ -188,7 +188,7 @@ def fetch_chain_sync(ticker_symbol: str, target_expiration: str = None):
 
 
 # --- Total Market Calculation ---
-def compute_total_market_gex(ticker_symbol: str, spot_price: float, historical_prices: list) -> GexResponse:
+def compute_total_market_gex(ticker_symbol: str, spot_price: float, historical_prices: list, r: float = 0.04) -> GexResponse:
     """
     Computes aggregated GEX for ALL expirations simultaneously.
     Uses concurrent fetching and Numpy vectorized formulas for speed.
@@ -199,7 +199,6 @@ def compute_total_market_gex(ticker_symbol: str, spot_price: float, historical_p
         raise ValueError(f"No options data found for {ticker_symbol}")
 
     today = datetime.datetime.today().date()
-    r = 0.04
 
     def process_chain(exp_date):
         try:
@@ -216,12 +215,12 @@ def compute_total_market_gex(ticker_symbol: str, spot_price: float, historical_p
             
             # --- Vectorized Calls ---
             if not calls.empty:
-                valid_calls = calls[calls['openInterest'] > 0].copy()
+                valid_calls = calls[(calls['openInterest'] > 0) & (calls['impliedVolatility'] > 0)].copy()
                 if not valid_calls.empty:
                     K = valid_calls['strike'].values
                     sigma = valid_calls['impliedVolatility'].values
                     oi = valid_calls['openInterest'].values
-                    
+
                     gamma = calculate_gamma_vectorized(spot_price, K, T, r, sigma)
                     valid_calls['call_gex'] = gamma * oi * 100 * spot_price
                 else:
@@ -232,7 +231,7 @@ def compute_total_market_gex(ticker_symbol: str, spot_price: float, historical_p
 
             # --- Vectorized Puts ---
             if not puts.empty:
-                valid_puts = puts[puts['openInterest'] > 0].copy()
+                valid_puts = puts[(puts['openInterest'] > 0) & (puts['impliedVolatility'] > 0)].copy()
                 if not valid_puts.empty:
                     K = valid_puts['strike'].values
                     sigma = valid_puts['impliedVolatility'].values
@@ -309,7 +308,7 @@ def compute_total_market_gex(ticker_symbol: str, spot_price: float, historical_p
 
 
 # --- Pure Calculation Logic ---
-def compute_gex_profile(ticker_symbol: str, spot_price: float, historical_prices: list, calls: pd.DataFrame, puts: pd.DataFrame, target_exp: str) -> GexResponse:
+def compute_gex_profile(ticker_symbol: str, spot_price: float, historical_prices: list, calls: pd.DataFrame, puts: pd.DataFrame, target_exp: str, r: float = 0.04) -> GexResponse:
     """
     Computes the GEX profile purely from memory (no I/O operations).
     """
@@ -340,7 +339,9 @@ def compute_gex_profile(ticker_symbol: str, spot_price: float, historical_prices
         if T <= 0:
             T = 0.001  # treat same-day expiry as a near-zero but non-zero value
 
-        r = 0.04  # risk-free rate proxy (approximate US 3-month T-bill rate)
+        # --- Step 4b: Drop rows with zero/missing IV — these produce zero gamma and add noise ---
+        calls = calls[calls['impliedVolatility'].gt(0) & calls['impliedVolatility'].notna()].copy()
+        puts = puts[puts['impliedVolatility'].gt(0) & puts['impliedVolatility'].notna()].copy()
 
         # --- Step 5: Calculate per-row Gamma using Black-Scholes ---
         calls['Gamma'] = calls.apply(
