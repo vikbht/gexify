@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from scipy.stats import norm
 import datetime
+from cachetools import cached, TTLCache
 from app.models.gex import GexResponse, GexDataPoint, DexDataPoint, ExpirationResponse, HistoricalPriceItem
 
 # --- Black-Scholes Gamma Calculation ---
@@ -72,6 +73,7 @@ def calculate_delta(S, K, T, r, sigma, option_type: str) -> float:
         return norm.cdf(d1) - 1.0    # N(d1) - 1  → negative for puts
 
 
+@cached(cache=TTLCache(maxsize=100, ttl=300))
 def fetch_expirations(ticker_symbol: str) -> ExpirationResponse:
     ticker = yf.Ticker(ticker_symbol)
     try:
@@ -82,8 +84,47 @@ def fetch_expirations(ticker_symbol: str) -> ExpirationResponse:
     except Exception as e:
         return ExpirationResponse(ticker=ticker_symbol, expirations=[], status="error", message=str(e))
 
-# --- Fetch Option Data & Calculate GEX ---
-def fetch_and_calculate_gex(ticker_symbol: str, target_expiration: str = None) -> GexResponse:
+# --- Cached Data Fetchers ---
+
+@cached(cache=TTLCache(maxsize=100, ttl=60))
+def fetch_history_sync(ticker_symbol: str):
+    ticker = yf.Ticker(ticker_symbol)
+    history = ticker.history(period="1d", interval="5m")
+    if history.empty:
+        raise ValueError("Failed to fetch spot price data. The market may be closed or the symbol is invalid.")
+    
+    spot_price = history['Close'].iloc[-1]
+    historical_prices = []
+    for dt_idx, row in history.iterrows():
+        time_str = dt_idx.strftime("%H:%M")
+        historical_prices.append(HistoricalPriceItem(
+            date=time_str,
+            price=row['Close']
+        ))
+    return spot_price, historical_prices
+
+@cached(cache=TTLCache(maxsize=100, ttl=60))
+def fetch_chain_sync(ticker_symbol: str, target_expiration: str = None):
+    ticker = yf.Ticker(ticker_symbol)
+    expirations = ticker.options
+    if not expirations:
+        raise ValueError("No options data found.")
+
+    if target_expiration and target_expiration in expirations:
+        target_exp = target_expiration
+    else:
+        target_exp = expirations[0]
+
+    print(f"Fetching {ticker_symbol} options chain for expiration: {target_exp}")
+    chain = ticker.option_chain(target_exp)
+    return chain.calls, chain.puts, target_exp
+
+
+# --- Pure Calculation Logic ---
+def compute_gex_profile(ticker_symbol: str, spot_price: float, historical_prices: list, calls: pd.DataFrame, puts: pd.DataFrame, target_exp: str) -> GexResponse:
+    """
+    Computes the GEX profile purely from memory (no I/O operations).
+    """
     """
     Full pipeline: fetch intraday prices + options chain, compute GEX per strike.
 
@@ -103,47 +144,8 @@ def fetch_and_calculate_gex(ticker_symbol: str, target_expiration: str = None) -
     Returns:
         GexResponse: Pydantic model with spot price, GEX profile, and intraday prices.
     """
-    ticker = yf.Ticker(ticker_symbol)
-
     try:
-        # --- Step 1: Fetch intraday spot price (1-day, 5-minute bars) ---
-        history = ticker.history(period="1d", interval="5m")
-        if history.empty:
-            return GexResponse(ticker=ticker_symbol, spot_price=0.0, expiration_date="", gex_data=[], historical_prices=[], status="error", message="Failed to fetch spot price data.")
-
-        # Use the most recent close as the live spot price
-        spot_price = history['Close'].iloc[-1]
-
-        # Build a list of (time, price) tuples for the intraday sparkline on the frontend
-        historical_prices = []
-        for dt_idx, row in history.iterrows():
-            # Format as HH:MM string for the chart labels
-            time_str = dt_idx.strftime("%H:%M")
-            historical_prices.append(HistoricalPriceItem(
-                date=time_str,
-                price=row['Close']
-            ))
-        
-        # --- Step 2: Resolve the target expiration date ---
-        # yfinance returns expirations sorted ascending (nearest first)
-        expirations = ticker.options
-        if not expirations:
-            return GexResponse(ticker=ticker_symbol, spot_price=spot_price, expiration_date="", gex_data=[], historical_prices=historical_prices, status="error", message="No options data found.")
-
-        # Honor a user-selected date, otherwise fall back to the nearest expiry
-        if target_expiration and target_expiration in expirations:
-            target_exp = target_expiration
-        else:
-            target_exp = expirations[0]  # nearest expiration by default
-
-        print(f"Processing {ticker_symbol} options for expiration: {target_exp} | Spot: ${spot_price:.2f}")
-
-        # --- Step 3: Fetch the full options chain for the chosen expiry ---
-        chain = ticker.option_chain(target_exp)
-        calls = chain.calls  # DataFrame: strike, lastPrice, impliedVolatility, openInterest, ...
-        puts = chain.puts
-
-        # --- Step 4: Compute Time-to-Expiry (T) in fractional years ---
+        # --- Compute Time-to-Expiry (T) in fractional years ---
         exp_date = datetime.datetime.strptime(target_exp, "%Y-%m-%d")
         today = datetime.datetime.now()
         T = (exp_date - today).days / 365.25

@@ -1,7 +1,7 @@
 import asyncio
 from fastapi import APIRouter, HTTPException, Path
 from app.models.gex import GexResponse, ExpirationResponse
-from app.services.gex_calculator import fetch_and_calculate_gex, fetch_expirations
+from app.services.gex_calculator import fetch_history_sync, fetch_chain_sync, compute_gex_profile, fetch_expirations
 import logging
 
 router = APIRouter()
@@ -52,14 +52,24 @@ async def get_gex(ticker: str = Path(..., pattern="^[A-Za-z]{1,5}$", description
     logger.info(f"Fetching GEX for {ticker} (Exp: {expiration})")
 
     loop = asyncio.get_running_loop()
-    response = await loop.run_in_executor(
-        None,                        # use the default ThreadPoolExecutor
-        fetch_and_calculate_gex,     # the synchronous function to run
-        ticker,                      # positional arg: ticker_symbol
-        expiration                   # positional arg: target_expiration
-    )
+    
+    try:
+        # Run history and options fetch concurrently in the thread pool
+        # This cuts the total yfinance network wait time almost in half
+        history_task = loop.run_in_executor(None, fetch_history_sync, ticker)
+        chain_task = loop.run_in_executor(None, fetch_chain_sync, ticker, expiration)
+        
+        # Wait for both I/O bounds to finish
+        (spot_price, historical_prices), (calls, puts, target_exp) = await asyncio.gather(history_task, chain_task)
+        
+        # Pure computation is fast enough to run in the main thread (or pool)
+        response = await loop.run_in_executor(
+            None, 
+            compute_gex_profile, 
+            ticker, spot_price, historical_prices, calls, puts, target_exp
+        )
+        return response
 
-    if response.status == "error":
-        raise HTTPException(status_code=400, detail=response.message)
-
-    return response
+    except Exception as e:
+        logger.error(f"Error fetching GEX for {ticker}: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
