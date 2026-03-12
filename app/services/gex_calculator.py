@@ -4,7 +4,8 @@ import numpy as np
 from scipy.stats import norm
 import datetime
 from cachetools import cached, TTLCache
-from app.models.gex import GexResponse, GexDataPoint, DexDataPoint, ExpirationResponse, HistoricalPriceItem
+import concurrent.futures
+from app.models.gex import GexResponse, GexDataPoint, DexDataPoint, ExpirationResponse, HistoricalPriceItem, ExpirationDetail
 
 # --- Black-Scholes Gamma Calculation ---
 def calculate_gamma(S, K, T, r, sigma):
@@ -69,8 +70,101 @@ def calculate_delta(S, K, T, r, sigma, option_type: str) -> float:
 
     if option_type == 'call':
         return norm.cdf(d1)          # N(d1)
-    else:
         return norm.cdf(d1) - 1.0    # N(d1) - 1  → negative for puts
+
+
+@cached(cache=TTLCache(maxsize=100, ttl=300))
+def fetch_term_structure(ticker_symbol: str) -> ExpirationResponse:
+    """
+    Fetches the total net GEX for every single available expiration date concurrently.
+    This powers the 'Heatmap' feature in the frontend dropdown.
+    """
+    ticker = yf.Ticker(ticker_symbol)
+    
+    try:
+        raw_expirations = getattr(ticker, 'options', [])
+        if not raw_expirations:
+            return ExpirationResponse(ticker=ticker_symbol, expirations=[])
+            
+        # Get spot price (we use the fast info or history to get a quick quote)
+        spot_history = ticker.history(period="1d", interval="1m")
+        if spot_history.empty:
+            raise ValueError(f"No pricing data available for {ticker_symbol}.")
+        spot_price = float(spot_history['Close'].iloc[-1])
+        
+        # We need a quick inner calculation for just one chain's total GEX
+        def calc_chain_gex(exp_date):
+            try:
+                chain = ticker.option_chain(exp_date)
+                calls, puts = chain.calls, chain.puts
+                
+                # Default risk-free rate 4%
+                r = 0.04
+                
+                # Calculate time to expiration (T)
+                expiration_dt = datetime.datetime.strptime(exp_date, "%Y-%m-%d")
+                today = datetime.datetime.today()
+                
+                # 0DTE protection: if today IS expiration, use 0.001 year (a few hours)
+                if expiration_dt.date() == today.date():
+                    days_to_expiration = 0.5  # half a day
+                else:
+                    days_to_expiration = (expiration_dt - today).days
+
+                # Time to expiration in fractional years
+                T = max(days_to_expiration / 365.25, 0.001)
+                
+                total_gex = 0.0
+                
+                # Sum Call GEX
+                if not calls.empty:
+                    for _, row in calls.iterrows():
+                        K = row['strike']
+                        sigma = row['impliedVolatility']
+                        oi = row['openInterest']
+                        if pd.isna(oi) or oi == 0: continue
+                        
+                        gamma = calculate_gamma(spot_price, K, T, r, sigma)
+                        call_gex = gamma * oi * 100 * spot_price
+                        total_gex += call_gex
+                
+                # Sum Put GEX
+                if not puts.empty:
+                    for _, row in puts.iterrows():
+                        K = row['strike']
+                        sigma = row['impliedVolatility']
+                        oi = row['openInterest']
+                        if pd.isna(oi) or oi == 0: continue
+                        
+                        gamma = calculate_gamma(spot_price, K, T, r, sigma)
+                        # Dealers sell puts -> short gamma. MMs who bought them are long gamma.
+                        # Put GEX is negative impact.
+                        put_gex = gamma * oi * 100 * spot_price * -1
+                        total_gex += put_gex
+                
+                return ExpirationDetail(date=exp_date, net_gex=total_gex)
+            except Exception as e:
+                # If a single chain fails to load, just return 0 GEX so we don't break the whole list
+                return ExpirationDetail(date=exp_date, net_gex=0.0)
+
+        # Concurrently fetch all chains
+        with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+            details = list(executor.map(calc_chain_gex, raw_expirations))
+
+        # Filter out completely dead chains if necessary, or just return them all
+        return ExpirationResponse(
+            ticker=ticker_symbol,
+            expirations=details
+        )
+
+    except Exception as e:
+        return ExpirationResponse(
+            ticker=ticker_symbol,
+            expirations=[],
+            status="error",
+            message=f"Failed to fetch term structure: {str(e)}"
+        )
+
 
 
 @cached(cache=TTLCache(maxsize=100, ttl=300))

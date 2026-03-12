@@ -32,8 +32,12 @@ class GexResponse(BaseModel):
     status: str = "success"
     message: str = ""
 
+class ExpirationDetail(BaseModel):
+    date: str
+    net_gex: float
+
 class ExpirationResponse(BaseModel):
     ticker: str
-    expirations: List[str]
+    expirations: List[ExpirationDetail]
     status: str = "success"
     message: str = ""

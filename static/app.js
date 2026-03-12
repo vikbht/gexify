@@ -43,11 +43,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (response.ok && data.expirations.length > 0) {
                 // Populate Dropdown
-                expirationSelect.innerHTML = ''; // Removed 'Auto-select Nearest'
-                data.expirations.forEach(exp => {
+                expirationSelect.innerHTML = '';
+                data.expirations.forEach(expObj => {
                     const option = document.createElement('option');
-                    option.value = exp;
-                    option.textContent = exp;
+                    
+                    // The value submitted to the API remains just the raw date string
+                    option.value = expObj.date;
+                    
+                    // Format the Net GEX value for display (in Billions)
+                    const gexBillion = expObj.net_gex / 1_000_000_000;
+                    const sign = gexBillion > 0 ? '+' : '';
+                    const formattedGex = `${sign}${(gexBillion).toFixed(2)}B`;
+                    
+                    // Determine Emoji Heatmap coloring based on +/- $100M threshold
+                    let emoji = '⚪'; // Neutral
+                    if (expObj.net_gex < -100_000_000) emoji = '🔴'; // Negative GEX regime
+                    if (expObj.net_gex > 100_000_000) emoji = '🟢';  // Positive GEX regime
+                    
+                    option.textContent = `${emoji} ${expObj.date} (${formattedGex})`;
                     expirationSelect.appendChild(option);
                 });
                 expirationSelect.disabled = false;

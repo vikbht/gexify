@@ -1,29 +1,24 @@
 import asyncio
 from fastapi import APIRouter, HTTPException, Path
 from app.models.gex import GexResponse, ExpirationResponse
-from app.services.gex_calculator import fetch_history_sync, fetch_chain_sync, compute_gex_profile, fetch_expirations
+from app.services.gex_calculator import fetch_history_sync, fetch_chain_sync, compute_gex_profile, fetch_term_structure
 import logging
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+
 @router.get("/gex/{ticker}/expirations", response_model=ExpirationResponse)
 async def get_expirations(ticker: str = Path(..., pattern="^[A-Za-z]{1,5}$", description="Stock ticker symbol")):
     """
-    Return all available options expiration dates for a given ticker.
-
-    The frontend calls this on ticker-input blur to pre-populate the
-    expiration dropdown before the user hits 'Analyze GEX'.
-
-    yfinance is a synchronous library — we offload it to a thread pool
-    via run_in_executor so it never blocks the FastAPI event loop.
+    Return all available options expiration dates & net GEX for a given ticker.
     """
-    ticker = ticker.upper()  # normalise to uppercase (yfinance is case-sensitive)
-    logger.info(f"Fetching expirations for {ticker}")
+    ticker = ticker.upper()  # normalise to uppercase
+    logger.info(f"Fetching term structure expirations for {ticker}")
 
     loop = asyncio.get_running_loop()
-    response = await loop.run_in_executor(None, fetch_expirations, ticker)
+    response = await loop.run_in_executor(None, fetch_term_structure, ticker)
 
     if response.status == "error":
         raise HTTPException(status_code=400, detail=response.message)
