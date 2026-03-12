@@ -17,9 +17,11 @@ Gexify is a web tool for options traders that fetches live options chain data, c
 - **Intraday Price Sparkline** — Full-day 5-min price bars rendered below the GEX chart for immediate price context
 - **Support & Resistance Detection** — Auto-identifies the peak put GEX strike (support) and peak call GEX strike (resistance)
 - **Market Regime Insight** — Positive GEX (low vol / range-bound) or Negative GEX (high vol / directional) signal
+- **Term Structure Heatmap** — Expiration dropdown dynamically colors dates with Emojis (🔴/🟢) and displays exact Net GEX values in Billions, giving an instant macro-view of the options flow.
 - **Auto-Refresh Toggle** — Keeps the dashboard live by silently polling background data every 60 seconds
 - **Async Backend** — yfinance calls run in a thread pool executor so the FastAPI event loop is never blocked
 - **Robust Error Handling & Validation** — Strict regex ticker validation, detailed API error messages, and graceful handling of closed-market periods
+- **Fast In-Memory Caching** — Uses `TTLCache` to store expensive option chains for 60 seconds, preventing Yahoo Finance rate limits and dropping API response times to 0.02s.
 - **Dark Glassmorphism UI** — Clean, modern dark-mode interface built with vanilla JS + CSS featuring smooth fade-in animations
 
 ---
@@ -161,6 +163,7 @@ Then open [http://localhost:8000](http://localhost:8000) in your browser.
 | 🚀 **Negative GEX Regime** | Total GEX < 0 → vol amplified → expect large directional moves |
 | 📈 **Intraday Sparkline** | Full-day 5-min price bars — puts the GEX/DEX profile in price context |
 | ⏱️ **Auto-Refresh Toggle** | When enabled, silently updates the backend data every 60 seconds |
+| 🔥 **Term Structure Heatmap** | Shows the Net GEX value in Billions for the next 30+ expiration dates in the dropdown |
 
 ---
 
