@@ -1,5 +1,5 @@
 import asyncio
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Path
 from app.models.gex import GexResponse, ExpirationResponse
 from app.services.gex_calculator import fetch_and_calculate_gex, fetch_expirations
 import logging
@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 @router.get("/gex/{ticker}/expirations", response_model=ExpirationResponse)
-async def get_expirations(ticker: str):
+async def get_expirations(ticker: str = Path(..., pattern="^[A-Za-z]{1,5}$", description="Stock ticker symbol")):
     """
     Return all available options expiration dates for a given ticker.
 
@@ -32,7 +32,7 @@ async def get_expirations(ticker: str):
 
 
 @router.get("/gex/{ticker}", response_model=GexResponse)
-async def get_gex(ticker: str, expiration: str = None):
+async def get_gex(ticker: str = Path(..., pattern="^[A-Za-z]{1,5}$", description="Stock ticker symbol"), expiration: str = None):
     """
     Return the full Gamma Exposure (GEX) profile for a ticker.
 
