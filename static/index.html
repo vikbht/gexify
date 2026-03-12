@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <!-- Vanilla CSS -->
-    <link rel="stylesheet" href="styles.css?v=5">
+    <link rel="stylesheet" href="styles.css?v=6">
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -124,18 +124,29 @@
                         <canvas id="gexChart"></canvas>
                     </div>
 
-                    <!-- Intraday Price Sparkline -->
-                    <div class="sparkline-section">
-                        <p class="sparkline-label">📈 Intraday Price</p>
-                        <div class="sparkline-container">
-                            <canvas id="sparklineChart"></canvas>
-                            <!-- Shown when market is closed / no intraday data available -->
-                            <div id="market-closed-msg" class="market-closed-overlay hidden">
-                                <span class="market-closed-icon">🔔</span>
-                                <p>No intraday data available</p>
-                                <p class="market-closed-sub">Market may be closed or data not yet published for today.</p>
-                            </div>
-                        </div>
+                    <!-- Educational Blurb -->
+                    <div class="education-blurb">
+                        <h4>Understanding the Chart</h4>
+                        <ul class="education-list">
+                            <li>
+                                <div class="blurb-icon call-icon"></div>
+                                <div class="blurb-text">
+                                    <strong>Positive GEX (Calls):</strong> Market Makers are long gamma. This acts as a dampener on volatility. Price tends to mean-revert or stay pinned near these strike levels, acting as strong support/resistance.
+                                </div>
+                            </li>
+                            <li>
+                                <div class="blurb-icon put-icon"></div>
+                                <div class="blurb-text">
+                                    <strong>Negative GEX (Puts):</strong> Market Makers are short gamma. This amplifies volatility. They are forced to sell when the market drops and buy when it rises, potentially accelerating directional breakouts.
+                                </div>
+                            </li>
+                            <li>
+                                <div class="blurb-icon dex-icon"></div>
+                                <div class="blurb-text">
+                                    <strong>Net DEX (Delta Exposure):</strong> Shows the aggregate directional bias (bullish vs bearish) of option positioning. Positive DEX implies overall call dominance; Negative DEX signifies put dominance.
+                                </div>
+                            </li>
+                        </ul>
                     </div>
 
                     <div class="legend-panel">
@@ -157,7 +168,7 @@
         </main>
     </div>
 
-    <script src="app.js?v=9"></script>
+    <script src="app.js?v=10"></script>
 </body>
 
 </html>

@@ -24,8 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const refreshGroup = document.querySelector('.auto-refresh-group');
     const lastRefreshedSpan = document.getElementById('last-refreshed');
     
-    let gexChart = null;       // Chart.js instance for GEX bar chart
-    let sparklineChart = null; // Chart.js instance for intraday price sparkline
+    let gexChart = null;       // Chart.js instance for main GEX profile
     let autoRefreshInterval = null; // Keeps track of the setInterval ID
     let dexVisible = true;     // Whether the DEX overlay is currently shown
 
@@ -237,15 +236,13 @@ document.addEventListener('DOMContentLoaded', () => {
             netDex.textContent = 'N/A';
         }
 
-        // Render GEX chart immediately; defer sparkline one frame so the
-        // results panel is fully visible and the canvas has real pixel dimensions.
+        // Render GEX chart immediately
         renderChart(data);
         // Reveal panel with fade-in: remove hidden first (sets display), then
         // add .visible one frame later so the CSS transition has something to animate from.
         resultsPanel.classList.remove('hidden');
         requestAnimationFrame(() => {
             resultsPanel.classList.add('visible');
-            renderSparkline(data);
         });
     }
 
@@ -580,107 +577,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
             }]
-        });
-    }
-
-    // --- Intraday Price Sparkline ---
-    function renderSparkline(data) {
-        const sparkCtx = document.getElementById('sparklineChart').getContext('2d');
-        const marketClosedMsg = document.getElementById('market-closed-msg');
-        const sparkCanvas = document.getElementById('sparklineChart');
-
-        // Destroy previous instance to avoid memory leaks on repeated analyses
-        if (sparklineChart) {
-            sparklineChart.destroy();
-        }
-
-        const prices = data.historical_prices;
-
-        // Market-closed / no-data detection:
-        // Empty array  → no bars at all (market closed, holiday, or pre-market call)
-        // All identical prices → yfinance returned a flat/stale series (also closed)
-        const isMarketClosed = !prices || prices.length === 0 ||
-            prices.every(p => p.price === prices[0].price);
-
-        if (isMarketClosed) {
-            // Hide canvas, show friendly message overlay
-            sparkCanvas.style.display = 'none';
-            marketClosedMsg.classList.remove('hidden');
-            return;
-        }
-
-        // Market is open / data available — hide overlay, restore canvas
-        sparkCanvas.style.display = 'block';
-        marketClosedMsg.classList.add('hidden');
-
-        const labels = prices.map(p => p.date);
-        const values = prices.map(p => p.price);
-
-
-        // Build a gradient fill beneath the line
-        const gradient = sparkCtx.createLinearGradient(0, 0, 0, 130);
-        gradient.addColorStop(0, 'rgba(56, 189, 248, 0.35)');
-        gradient.addColorStop(1, 'rgba(56, 189, 248, 0.0)');
-
-        // Calculate min/max with a small padding for a tight Y-axis
-        const minPrice = Math.min(...values);
-        const maxPrice = Math.max(...values);
-        const padding = (maxPrice - minPrice) * 0.15 || 1;
-
-        sparklineChart = new Chart(sparkCtx, {
-            type: 'line',
-            data: {
-                labels,
-                datasets: [{
-                    label: 'Price',
-                    data: values,
-                    borderColor: '#38bdf8',
-                    borderWidth: 2,
-                    pointRadius: 0,          // no dots — clean sparkline look
-                    pointHoverRadius: 4,
-                    tension: 0.4,            // smooth bezier curve
-                    fill: true,
-                    backgroundColor: gradient
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: { mode: 'index', intersect: false },
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
-                        titleColor: '#94a3b8',
-                        bodyColor: '#f8fafc',
-                        borderColor: 'rgba(255,255,255,0.1)',
-                        borderWidth: 1,
-                        padding: 10,
-                        callbacks: {
-                            label: ctx => `$${ctx.parsed.y.toFixed(2)}`
-                        }
-                    }
-                },
-                scales: {
-                    x: {
-                        grid: { display: false },
-                        ticks: {
-                            color: '#94a3b8',
-                            maxTicksLimit: 8,   // only show ~8 time labels to avoid clutter
-                            maxRotation: 0
-                        }
-                    },
-                    y: {
-                        min: minPrice - padding,
-                        max: maxPrice + padding,
-                        grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
-                        ticks: {
-                            color: '#94a3b8',
-                            callback: v => `$${v.toFixed(0)}`
-                        }
-                    }
-                }
-            }
         });
     }
 });
