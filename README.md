@@ -8,7 +8,7 @@ Gexify is a web tool for options traders that fetches live options chain data, c
 
 ## ✨ Features
 
-- **Live GEX Chart** — Bar chart of Call GEX (positive) vs Put GEX (negative) per strike, filtered to ±15% of spot
+- **Live GEX Chart** — Bar chart of Call GEX (positive) vs Put GEX (negative) per strike, filtered to ±15% of spot on the backend for optimal performance
 - **DEX Overlay** — Purple line showing net Delta Exposure per strike on a secondary Y-axis; togglable with the δ button
 - **Spot Price Line** — Dashed white vertical line marking the current price on the chart
 - **GEX Flip Level** — Cumulative GEX zero-crossing strike (dealer gamma reversal); shown as an orange dashed line + badge
@@ -19,7 +19,8 @@ Gexify is a web tool for options traders that fetches live options chain data, c
 - **Market Regime Insight** — Positive GEX (low vol / range-bound) or Negative GEX (high vol / directional) signal
 - **Expiration Picker** — Dynamically loads available options expiration dates for any ticker
 - **Async Backend** — yfinance calls run in a thread pool executor so the FastAPI event loop is never blocked
-- **Dark Glassmorphism UI** — Clean, modern dark-mode interface built with vanilla JS + CSS
+- **Robust Error Handling & Validation** — Strict regex ticker validation, detailed API error messages, and graceful handling of closed-market periods
+- **Dark Glassmorphism UI** — Clean, modern dark-mode interface built with vanilla JS + CSS featuring smooth fade-in animations
 
 ---
 
