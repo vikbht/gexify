@@ -319,12 +319,101 @@ body {
     background: var(--error-bg);
     border: 1px solid var(--error-border);
     color: #fca5a5;
-    padding: 1rem;
-    border-radius: 8px;
-    text-align: center;
-    font-weight: 500;
+    padding: 1rem 1.25rem;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
     animation: fadeIn 0.3s ease;
 }
+
+.error-icon {
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+
+.error-body {
+    flex: 1;
+}
+
+.error-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin-bottom: 0.2rem;
+    color: #fca5a5;
+}
+
+.error-detail {
+    font-size: 0.82rem;
+    color: #fda4af;
+    opacity: 0.85;
+}
+
+.retry-btn {
+    flex-shrink: 0;
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid rgba(239, 68, 68, 0.5);
+    color: #fca5a5;
+    padding: 0.4rem 0.9rem;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.retry-btn:hover {
+    background: rgba(239, 68, 68, 0.35);
+}
+
+/* --- Results panel fade-in (#12) --- */
+.results-panel {
+    transition: opacity 0.35s ease, transform 0.35s ease;
+    opacity: 0;
+    transform: translateY(8px);
+}
+
+.results-panel.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* --- Market Closed Overlay (#14) --- */
+.sparkline-container {
+    position: relative;
+}
+
+.market-closed-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.82);
+    border-radius: 8px;
+    gap: 0.4rem;
+    backdrop-filter: blur(3px);
+}
+
+.market-closed-icon {
+    font-size: 2rem;
+}
+
+.market-closed-overlay p {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.market-closed-sub {
+    font-size: 0.78rem !important;
+    font-weight: 400 !important;
+    color: var(--text-secondary) !important;
+    text-align: center;
+    max-width: 280px;
+}
+
 
 /* --- Animations --- */
 @keyframes spin {

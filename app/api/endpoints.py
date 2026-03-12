@@ -22,7 +22,7 @@ async def get_expirations(ticker: str):
     ticker = ticker.upper()  # normalise to uppercase (yfinance is case-sensitive)
     logger.info(f"Fetching expirations for {ticker}")
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     response = await loop.run_in_executor(None, fetch_expirations, ticker)
 
     if response.status == "error":
@@ -51,7 +51,7 @@ async def get_gex(ticker: str, expiration: str = None):
     ticker = ticker.upper()  # normalise to uppercase
     logger.info(f"Fetching GEX for {ticker} (Exp: {expiration})")
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     response = await loop.run_in_executor(
         None,                        # use the default ThreadPoolExecutor
         fetch_and_calculate_gex,     # the synchronous function to run

@@ -44,7 +44,15 @@
                 </form>
             </section>
 
-            <div id="error-message" class="error-banner hidden"></div>
+            <!-- Error Banner: shown on API failure with actionable detail -->
+            <div id="error-message" class="error-banner hidden">
+                <div class="error-icon">⚠️</div>
+                <div class="error-body">
+                    <p class="error-title">Something went wrong</p>
+                    <p class="error-detail" id="error-detail">An unexpected error occurred.</p>
+                </div>
+                <button class="retry-btn" id="retry-btn">Try Again</button>
+            </div>
 
             <section id="results-panel" class="results-panel hidden">
                 <div class="glass-panel main-panel">
@@ -104,6 +112,12 @@
                         <p class="sparkline-label">📈 Intraday Price</p>
                         <div class="sparkline-container">
                             <canvas id="sparklineChart"></canvas>
+                            <!-- Shown when market is closed / no intraday data available -->
+                            <div id="market-closed-msg" class="market-closed-overlay hidden">
+                                <span class="market-closed-icon">🔔</span>
+                                <p>No intraday data available</p>
+                                <p class="market-closed-sub">Market may be closed or data not yet published for today.</p>
+                            </div>
                         </div>
                     </div>
 
@@ -126,7 +140,7 @@
         </main>
     </div>
 
-    <script src="app.js?v=4"></script>
+    <script src="app.js?v=5"></script>
 </body>
 
 </html>

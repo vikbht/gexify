@@ -75,6 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // UI Reset & Loading State
         setLoading(true);
         errorBanner.classList.add('hidden');
+        resultsPanel.classList.remove('visible');
         resultsPanel.classList.add('hidden');
 
         try {
@@ -110,9 +111,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function showError(message) {
-        errorBanner.textContent = message;
+        // Populate the detail paragraph with the actual API error message
+        document.getElementById('error-detail').textContent = message || 'An unexpected error occurred.';
         errorBanner.classList.remove('hidden');
     }
+
+    // Retry button re-submits the form
+    document.getElementById('retry-btn').addEventListener('click', () => {
+        errorBanner.classList.add('hidden');
+        form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+    });
 
     function renderResults(data) {
         // Update Badges
@@ -137,8 +145,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // Render GEX chart immediately; defer sparkline one frame so the
         // results panel is fully visible and the canvas has real pixel dimensions.
         renderChart(data);
+        // Reveal panel with fade-in: remove hidden first (sets display), then
+        // add .visible one frame later so the CSS transition has something to animate from.
         resultsPanel.classList.remove('hidden');
-        requestAnimationFrame(() => renderSparkline(data));
+        requestAnimationFrame(() => {
+            resultsPanel.classList.add('visible');
+            renderSparkline(data);
+        });
     }
 
     function renderChart(data) {
@@ -471,6 +484,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Intraday Price Sparkline ---
     function renderSparkline(data) {
         const sparkCtx = document.getElementById('sparklineChart').getContext('2d');
+        const marketClosedMsg = document.getElementById('market-closed-msg');
+        const sparkCanvas = document.getElementById('sparklineChart');
 
         // Destroy previous instance to avoid memory leaks on repeated analyses
         if (sparklineChart) {
@@ -478,10 +493,27 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const prices = data.historical_prices;
-        if (!prices || prices.length === 0) return;
+
+        // Market-closed / no-data detection:
+        // Empty array  → no bars at all (market closed, holiday, or pre-market call)
+        // All identical prices → yfinance returned a flat/stale series (also closed)
+        const isMarketClosed = !prices || prices.length === 0 ||
+            prices.every(p => p.price === prices[0].price);
+
+        if (isMarketClosed) {
+            // Hide canvas, show friendly message overlay
+            sparkCanvas.style.display = 'none';
+            marketClosedMsg.classList.remove('hidden');
+            return;
+        }
+
+        // Market is open / data available — hide overlay, restore canvas
+        sparkCanvas.style.display = 'block';
+        marketClosedMsg.classList.add('hidden');
 
         const labels = prices.map(p => p.date);
         const values = prices.map(p => p.price);
+
 
         // Build a gradient fill beneath the line
         const gradient = sparkCtx.createLinearGradient(0, 0, 0, 130);

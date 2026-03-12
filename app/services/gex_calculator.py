@@ -217,9 +217,18 @@ def fetch_and_calculate_gex(ticker_symbol: str, target_expiration: str = None) -
         dex_flip_strike = find_flip_strike(sorted_profile['Total_DEX'])
 
         # --- Step 9: Serialize to Pydantic response models ---
+        # Filter to ±15% of spot price — matches what the frontend chart displays.
+        # Flip levels are calculated on the FULL dataset above for accuracy; we only
+        # narrow the payload here to reduce wire size (~75% fewer data points).
+        lower_bound = spot_price * 0.85
+        upper_bound = spot_price * 1.15
+        filtered_profile = gex_profile[
+            (gex_profile.index >= lower_bound) & (gex_profile.index <= upper_bound)
+        ]
+
         gex_data = []
         dex_data = []
-        for strike, row in gex_profile.iterrows():
+        for strike, row in filtered_profile.iterrows():
             gex_data.append(GexDataPoint(
                 strike=strike,
                 call_gex=row['Call_GEX'],
@@ -243,6 +252,7 @@ def fetch_and_calculate_gex(ticker_symbol: str, target_expiration: str = None) -
             gex_flip_strike=gex_flip_strike,
             dex_flip_strike=dex_flip_strike
         )
+
 
     except Exception as e:
         # Return a structured error response so the frontend can display a message
