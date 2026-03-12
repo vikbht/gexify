@@ -5,7 +5,7 @@ from scipy.stats import norm
 import datetime
 from cachetools import cached, TTLCache
 import concurrent.futures
-from app.models.gex import GexResponse, GexDataPoint, DexDataPoint, ExpirationResponse, HistoricalPriceItem, ExpirationDetail
+from app.models.gex import GexResponse, GexDataPoint, ExpirationResponse, HistoricalPriceItem, ExpirationDetail
 
 # --- Fast Vectorized Gamma Calculation ---
 def calculate_gamma_vectorized(S, K, T, r, sigma):
@@ -44,39 +44,6 @@ def calculate_gamma(S, K, T, r, sigma):
     gamma = norm.pdf(d1) / (S * sigma * np.sqrt(T))
     return gamma
 
-
-# --- Black-Scholes Delta Calculation ---
-def calculate_delta(S, K, T, r, sigma, option_type: str) -> float:
-    """
-    Computes the Black-Scholes Delta for a single option contract.
-
-    Delta represents the rate of change of the option price with respect to
-    the underlying spot price.  Dealers who sold options to customers must
-    hold delta-equivalent shares in the underlying to stay hedged — the
-    aggregate of this hedging activity is Delta Exposure (DEX).
-
-    Call delta = N(d1)           ranges (0, 1)   → always positive
-    Put  delta = N(d1) − 1       ranges (-1, 0)  → always negative
-
-    Args:
-        S (float): Current spot price
-        K (float): Strike price
-        T (float): Time to expiration in years
-        r (float): Risk-free rate (annualized)
-        sigma (float): Implied volatility (annualized)
-        option_type (str): 'call' or 'put'
-
-    Returns:
-        float: Delta value (or 0.0 if inputs are degenerate)
-    """
-    if T <= 0 or sigma <= 0:
-        return 0.0
-
-    d1 = (np.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
-
-    if option_type == 'call':
-        return norm.cdf(d1)          # N(d1)
-        return norm.cdf(d1) - 1.0    # N(d1) - 1  → negative for puts
 
 
 @cached(cache=TTLCache(maxsize=100, ttl=300))
@@ -223,7 +190,7 @@ def fetch_chain_sync(ticker_symbol: str, target_expiration: str = None):
 # --- Total Market Calculation ---
 def compute_total_market_gex(ticker_symbol: str, spot_price: float, historical_prices: list) -> GexResponse:
     """
-    Computes aggregated GEX and DEX for ALL expirations simultaneously.
+    Computes aggregated GEX for ALL expirations simultaneously.
     Uses concurrent fetching and Numpy vectorized formulas for speed.
     """
     ticker = yf.Ticker(ticker_symbol)
@@ -257,18 +224,10 @@ def compute_total_market_gex(ticker_symbol: str, spot_price: float, historical_p
                     
                     gamma = calculate_gamma_vectorized(spot_price, K, T, r, sigma)
                     valid_calls['call_gex'] = gamma * oi * 100 * spot_price
-                    
-                    # For total DEX approximation, we use standard d1 CDF.
-                    # This is less precise in large batches but sufficiently accurate for regime profiling.
-                    d1_c = (np.log(spot_price / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
-                    call_delta = norm.cdf(d1_c)
-                    valid_calls['call_dex'] = call_delta * oi * 100 * spot_price
                 else:
                     valid_calls['call_gex'] = 0.0
-                    valid_calls['call_dex'] = 0.0
             else:
                 calls['call_gex'] = 0.0
-                calls['call_dex'] = 0.0
                 valid_calls = calls
 
             # --- Vectorized Puts ---
@@ -278,39 +237,33 @@ def compute_total_market_gex(ticker_symbol: str, spot_price: float, historical_p
                     K = valid_puts['strike'].values
                     sigma = valid_puts['impliedVolatility'].values
                     oi = valid_puts['openInterest'].values
-                    
+
                     gamma = calculate_gamma_vectorized(spot_price, K, T, r, sigma)
                     valid_puts['put_gex'] = gamma * oi * 100 * spot_price * -1
-                    
-                    d1_p = (np.log(spot_price / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
-                    put_delta = norm.cdf(d1_p) - 1.0
-                    valid_puts['put_dex'] = put_delta * oi * 100 * spot_price
                 else:
                     valid_puts['put_gex'] = 0.0
-                    valid_puts['put_dex'] = 0.0
             else:
                 puts['put_gex'] = 0.0
-                puts['put_dex'] = 0.0
                 valid_puts = puts
-                
+
             dfs = []
             if not valid_calls.empty:
-                dfs.append(valid_calls[['strike', 'call_gex', 'call_dex']])
+                dfs.append(valid_calls[['strike', 'call_gex']])
             if not valid_puts.empty:
-                dfs.append(valid_puts[['strike', 'put_gex', 'put_dex']])
-                
-            if not dfs: return pd.DataFrame(columns=['strike', 'call_gex', 'call_dex', 'put_gex', 'put_dex'])
-            
+                dfs.append(valid_puts[['strike', 'put_gex']])
+
+            if not dfs: return pd.DataFrame(columns=['strike', 'call_gex', 'put_gex'])
+
             if len(dfs) == 2:
                 res = pd.merge(dfs[0], dfs[1], on='strike', how='outer').fillna(0)
             else:
                 res = dfs[0].copy()
-                for col in ['call_gex', 'call_dex', 'put_gex', 'put_dex']:
+                for col in ['call_gex', 'put_gex']:
                     if col not in res.columns: res[col] = 0.0
-                
+
             return res
         except Exception as e:
-            return pd.DataFrame(columns=['strike', 'call_gex', 'call_dex', 'put_gex', 'put_dex'])
+            return pd.DataFrame(columns=['strike', 'call_gex', 'put_gex'])
 
     # Fetch and compute all chains concurrently
     with concurrent.futures.ThreadPoolExecutor(max_workers=30) as executor:
@@ -326,52 +279,32 @@ def compute_total_market_gex(ticker_symbol: str, spot_price: float, historical_p
     
     # Calculate Totals
     agg_df['total_gex'] = agg_df['call_gex'] + agg_df['put_gex']
-    agg_df['total_dex'] = agg_df['call_dex'] + agg_df['put_dex']
-    
+
     # Format into Response Model
     gex_data = []
-    dex_data = []
     cumulative_gex = 0.0
     gex_flip_strike = None
-    cumulative_dex = 0.0
-    dex_flip_strike = None
-    
+
     for _, row in agg_df.iterrows():
         K = row['strike']
-        
-        # Build GEX Model
-        g_data = GexDataPoint(
+
+        gex_data.append(GexDataPoint(
             strike=K, call_gex=row['call_gex'], put_gex=row['put_gex'], total_gex=row['total_gex']
-        )
-        gex_data.append(g_data)
-        
-        # Build DEX Model
-        d_data = DexDataPoint(
-            strike=K, call_dex=row['call_dex'], put_dex=row['put_dex'], total_dex=row['total_dex']
-        )
-        dex_data.append(d_data)
-        
-        # Check Flips
+        ))
+
         if spot_price * 0.5 <= K <= spot_price * 1.5:
             prev_cum_gex = cumulative_gex
             cumulative_gex += row['total_gex']
             if prev_cum_gex < 0 and cumulative_gex >= 0 and gex_flip_strike is None:
                 gex_flip_strike = K
-                
-            prev_cum_dex = cumulative_dex
-            cumulative_dex += row['total_dex']
-            if prev_cum_dex < 0 and cumulative_dex >= 0 and dex_flip_strike is None:
-                dex_flip_strike = K
 
     return GexResponse(
         ticker=ticker_symbol,
         spot_price=spot_price,
         expiration_date="Total Market (All Expirations)",
         gex_data=gex_data,
-        dex_data=dex_data,
         historical_prices=historical_prices,
         gex_flip_strike=gex_flip_strike,
-        dex_flip_strike=dex_flip_strike
     )
 
 
@@ -409,7 +342,7 @@ def compute_gex_profile(ticker_symbol: str, spot_price: float, historical_prices
 
         r = 0.04  # risk-free rate proxy (approximate US 3-month T-bill rate)
 
-        # --- Step 5: Calculate per-row Gamma AND Delta using Black-Scholes ---
+        # --- Step 5: Calculate per-row Gamma using Black-Scholes ---
         calls['Gamma'] = calls.apply(
             lambda row: calculate_gamma(spot_price, row['strike'], T, r, row['impliedVolatility']),
             axis=1
@@ -418,42 +351,25 @@ def compute_gex_profile(ticker_symbol: str, spot_price: float, historical_prices
             lambda row: calculate_gamma(spot_price, row['strike'], T, r, row['impliedVolatility']),
             axis=1
         )
-        # Delta for calls: N(d1) ∈ (0, 1) — always positive
-        calls['Delta'] = calls.apply(
-            lambda row: calculate_delta(spot_price, row['strike'], T, r, row['impliedVolatility'], 'call'),
-            axis=1
-        )
-        # Delta for puts: N(d1)−1 ∈ (−1, 0) — always negative
-        puts['Delta'] = puts.apply(
-            lambda row: calculate_delta(spot_price, row['strike'], T, r, row['impliedVolatility'], 'put'),
-            axis=1
-        )
 
-        # --- Step 6: Convert Gamma → GEX and Delta → DEX (both dollar-denominated) ---
+        # --- Step 6: Convert Gamma → GEX (dollar-denominated) ---
         # Multiplying by 100 accounts for standard US equity option contract size (100 shares)
         calls['GEX'] = calls['Gamma'] * calls['openInterest'] * 100 * spot_price
         puts['GEX'] = puts['Gamma'] * puts['openInterest'] * 100 * spot_price * (-1)  # puts are negative
 
-        # DEX: Delta × OI × 100 × Spot  (inherits sign from delta — puts naturally negative)
-        calls['DEX'] = calls['Delta'] * calls['openInterest'] * 100 * spot_price
-        puts['DEX'] = puts['Delta'] * puts['openInterest'] * 100 * spot_price
-
         # --- Step 7: Merge calls and puts by strike price ---
-        df_calls = calls[['strike', 'GEX', 'DEX']].rename(columns={'GEX': 'Call_GEX', 'DEX': 'Call_DEX'}).set_index('strike')
-        df_puts = puts[['strike', 'GEX', 'DEX']].rename(columns={'GEX': 'Put_GEX', 'DEX': 'Put_DEX'}).set_index('strike')
+        df_calls = calls[['strike', 'GEX']].rename(columns={'GEX': 'Call_GEX'}).set_index('strike')
+        df_puts = puts[['strike', 'GEX']].rename(columns={'GEX': 'Put_GEX'}).set_index('strike')
 
         # Outer join on strike — fills missing strikes with 0
         combined = pd.concat([df_calls, df_puts], axis=1).fillna(0)
         combined['Total_GEX'] = combined['Call_GEX'] + combined['Put_GEX']
-        combined['Total_DEX'] = combined['Call_DEX'] + combined['Put_DEX']
 
-        # Keep reference to gex_profile variable for backward compat (same dataframe)
         gex_profile = combined
 
         # --- Step 8: Find the GEX Flip Level ---
         # Sort strikes ascending and compute a running cumulative sum of Total_GEX.
-        # The "flip" is the first strike where the cumulative sum changes sign —
-        # i.e. where dealer net gamma exposure transitions from positive to negative (or vice versa).
+        # The "flip" is the first strike where the cumulative sum changes sign.
         sorted_profile = gex_profile.sort_index()
 
         def find_flip_strike(series):
@@ -468,50 +384,34 @@ def compute_gex_profile(ticker_symbol: str, spot_price: float, historical_prices
 
         gex_flip_strike = find_flip_strike(sorted_profile['Total_GEX'])
 
-        # --- Step 8b: Find the DEX Flip Level ---
-        # Same logic applied to cumulative Total_DEX — the strike where dealer
-        # net directional exposure changes sign (bullish ↔ bearish pivot).
-        dex_flip_strike = find_flip_strike(sorted_profile['Total_DEX'])
-
         # --- Step 9: Serialize to Pydantic response models ---
-        # Filter to ±15% of spot price — matches what the frontend chart displays.
-        # Flip levels are calculated on the FULL dataset above for accuracy; we only
-        # narrow the payload here to reduce wire size (~75% fewer data points).
+        # Filter to ±15% of spot price to reduce wire size.
         lower_bound = spot_price * 0.85
         upper_bound = spot_price * 1.15
         filtered_profile = gex_profile[
             (gex_profile.index >= lower_bound) & (gex_profile.index <= upper_bound)
         ]
 
-        gex_data = []
-        dex_data = []
-        for strike, row in filtered_profile.iterrows():
-            gex_data.append(GexDataPoint(
+        gex_data = [
+            GexDataPoint(
                 strike=strike,
                 call_gex=row['Call_GEX'],
                 put_gex=row['Put_GEX'],
                 total_gex=row['Total_GEX']
-            ))
-            dex_data.append(DexDataPoint(
-                strike=strike,
-                call_dex=row['Call_DEX'],
-                put_dex=row['Put_DEX'],
-                total_dex=row['Total_DEX']
-            ))
+            )
+            for strike, row in filtered_profile.iterrows()
+        ]
 
         return GexResponse(
             ticker=ticker_symbol,
             spot_price=spot_price,
             expiration_date=target_exp,
             gex_data=gex_data,
-            dex_data=dex_data,
             historical_prices=historical_prices,
             gex_flip_strike=gex_flip_strike,
-            dex_flip_strike=dex_flip_strike
         )
-
 
     except Exception as e:
         # Return a structured error response so the frontend can display a message
-        return GexResponse(ticker=ticker_symbol, spot_price=0.0, expiration_date="", gex_data=[], dex_data=[], historical_prices=[], status="error", message=str(e))
+        return GexResponse(ticker=ticker_symbol, spot_price=0.0, expiration_date="", gex_data=[], historical_prices=[], status="error", message=str(e))
 

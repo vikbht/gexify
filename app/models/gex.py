@@ -7,13 +7,6 @@ class GexDataPoint(BaseModel):
     put_gex: float
     total_gex: float
 
-class DexDataPoint(BaseModel):
-    """Per-strike Delta Exposure — the directional hedging pressure dealers face."""
-    strike: float
-    call_dex: float   # N(d1) * OI * 100 * Spot  (always positive)
-    put_dex: float    # (N(d1)-1) * OI * 100 * Spot  (always negative)
-    total_dex: float  # call_dex + put_dex
-
 class HistoricalPriceItem(BaseModel):
     date: str
     price: float
@@ -23,12 +16,9 @@ class GexResponse(BaseModel):
     spot_price: float
     expiration_date: str
     gex_data: List[GexDataPoint]
-    dex_data: List[DexDataPoint] = []
     historical_prices: List[HistoricalPriceItem] = []
     # GEX flip: strike where cumulative GEX crosses zero
     gex_flip_strike: Optional[float] = None
-    # DEX flip: strike where cumulative DEX crosses zero
-    dex_flip_strike: Optional[float] = None
     status: str = "success"
     message: str = ""
 
