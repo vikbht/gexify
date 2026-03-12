@@ -139,7 +139,22 @@ def fetch_and_calculate_gex(ticker_symbol: str, target_expiration: str = None) -
         gex_profile = pd.concat([df_calls, df_puts], axis=1).fillna(0)
         gex_profile['Total_GEX'] = gex_profile['Call_GEX'] + gex_profile['Put_GEX']
 
-        # --- Step 8: Serialize to Pydantic response models ---
+        # --- Step 8: Find the GEX Flip Level ---
+        # Sort strikes ascending and compute a running cumulative sum of Total_GEX.
+        # The "flip" is the first strike where the cumulative sum changes sign —
+        # i.e. where dealer net gamma exposure transitions from positive to negative (or vice versa).
+        gex_flip_strike = None
+        sorted_profile = gex_profile.sort_index()  # sort by strike ascending
+        cumulative = sorted_profile['Total_GEX'].cumsum()
+        # Walk through pairs of consecutive cumulative values to detect sign change
+        cum_values = cumulative.values
+        cum_strikes = cumulative.index.values
+        for i in range(len(cum_values) - 1):
+            if cum_values[i] * cum_values[i + 1] < 0:  # opposite signs → zero crossing
+                gex_flip_strike = float(cum_strikes[i + 1])
+                break
+
+        # --- Step 9: Serialize to Pydantic response models ---
         gex_data = []
         for strike, row in gex_profile.iterrows():
             gex_data.append(GexDataPoint(
@@ -154,7 +169,8 @@ def fetch_and_calculate_gex(ticker_symbol: str, target_expiration: str = None) -
             spot_price=spot_price,
             expiration_date=target_exp,
             gex_data=gex_data,
-            historical_prices=historical_prices
+            historical_prices=historical_prices,
+            gex_flip_strike=gex_flip_strike
         )
 
     except Exception as e:

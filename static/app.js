@@ -14,8 +14,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const expirationSelect = document.getElementById('expiration-select');
     const supportLevel = document.getElementById('support-level');
     const resistanceLevel = document.getElementById('resistance-level');
+    const flipLevel = document.getElementById('flip-level');
 
-    let gexChart = null; // Chart.js instance for GEX
+    let gexChart = null;      // Chart.js instance for GEX bar chart
+    let sparklineChart = null; // Chart.js instance for intraday price sparkline
 
     // Fetch expirations when user types a ticker
     tickerInput.addEventListener('blur', async () => {
@@ -106,11 +108,14 @@ document.addEventListener('DOMContentLoaded', () => {
         spotPriceDisplay.textContent = `$${data.spot_price.toFixed(2)}`;
         expirationDisplay.textContent = data.expiration_date;
 
-        // Render Chart
-        renderChart(data);
+        // Update GEX Flip badge (orange) — null if no zero-crossing found in filtered window
+        flipLevel.textContent = data.gex_flip_strike ? `$${data.gex_flip_strike.toFixed(2)}` : 'N/A';
 
-        // Show Panel
+        // Render GEX chart immediately; defer sparkline one frame so the
+        // results panel is fully visible and the canvas has real pixel dimensions.
+        renderChart(data);
         resultsPanel.classList.remove('hidden');
+        requestAnimationFrame(() => renderSparkline(data));
     }
 
     function renderChart(data) {
@@ -162,8 +167,9 @@ document.addEventListener('DOMContentLoaded', () => {
         supportLevel.textContent = supportStrike ? `$${supportStrike.toFixed(2)}` : 'N/A';
         resistanceLevel.textContent = resistanceStrike ? `$${resistanceStrike.toFixed(2)}` : 'N/A';
 
-        // 2. Render GEX Chart
-        renderGexChart(ctx, labels, callGexData, putGexData, spotPrice, gridColor, textColor);
+        // 2. Render GEX Chart — pass flipStrike so the plugin can draw it
+        const flipStrike = data.gex_flip_strike;
+        renderGexChart(ctx, labels, callGexData, putGexData, spotPrice, flipStrike, gridColor, textColor);
 
         // 4. Update Insights Banner
         const localGex = filteredData.reduce((acc, d) => acc + d.total_gex, 0) / billionScale;
@@ -187,7 +193,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function renderGexChart(ctx, labels, callGexData, putGexData, spotPrice, gridColor, textColor) {
+    function renderGexChart(ctx, labels, callGexData, putGexData, spotPrice, flipStrike, gridColor, textColor) {
         gexChart = new Chart(ctx, {
             type: 'bar',
             data: {
@@ -313,58 +319,155 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             },
             plugins: [{
-                // Custom plugin to draw the Spot Price vertical line
+                // Custom plugin: draws the Spot Price line AND the GEX Flip line as vertical dashed overlays
                 id: 'spotPriceLine',
                 afterDraw: (chart) => {
                     const ctx = chart.ctx;
                     const xAxis = chart.scales.x;
                     const yAxis = chart.scales.y;
 
-                    // Find the pixel position for the spot price
-                    // We need to interpolate between labels if the exact spot isn't a strike
-                    let pixelX = xAxis.getPixelForValue(spotPrice);
-
-                    // Fallback interpolation if Chart.js exact value matching fails
-                    if (isNaN(pixelX) || pixelX === undefined) {
-                        // rough estimation
-                        for (let i = 0; i < labels.length - 1; i++) {
-                            if (spotPrice >= labels[i] && spotPrice <= labels[i + 1]) {
-                                const ratio = (spotPrice - labels[i]) / (labels[i + 1] - labels[i]);
-                                const p1 = xAxis.getPixelForTick(i);
-                                const p2 = xAxis.getPixelForTick(i + 1);
-                                pixelX = p1 + (p2 - p1) * ratio;
-                                break;
+                    // Helper: resolve pixel X for an arbitrary price value using label interpolation
+                    function getPricePixel(price) {
+                        let px = xAxis.getPixelForValue(price);
+                        if (isNaN(px) || px === undefined) {
+                            for (let i = 0; i < labels.length - 1; i++) {
+                                if (price >= labels[i] && price <= labels[i + 1]) {
+                                    const ratio = (price - labels[i]) / (labels[i + 1] - labels[i]);
+                                    const p1 = xAxis.getPixelForTick(i);
+                                    const p2 = xAxis.getPixelForTick(i + 1);
+                                    px = p1 + (p2 - p1) * ratio;
+                                    break;
+                                }
                             }
                         }
+                        return px;
                     }
 
-                    if (pixelX && !isNaN(pixelX)) {
+                    // Helper: draw a vertical dashed line with a floating label above it
+                    function drawPriceLine(px, lineColor, labelText) {
+                        if (!px || isNaN(px)) return;
                         ctx.save();
                         ctx.beginPath();
-                        ctx.moveTo(pixelX, yAxis.top);
-                        ctx.lineTo(pixelX, yAxis.bottom);
+                        ctx.moveTo(px, yAxis.top);
+                        ctx.lineTo(px, yAxis.bottom);
                         ctx.lineWidth = 2;
-                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+                        ctx.strokeStyle = lineColor;
                         ctx.setLineDash([5, 5]);
                         ctx.stroke();
 
-                        // Add label background
-                        ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
-                        const text = `Spot: $${spotPrice.toFixed(2)}`;
-                        const textWidth = ctx.measureText(text).width;
-                        ctx.fillRect(pixelX - textWidth / 2 - 6, yAxis.top - 20, textWidth + 12, 20);
+                        // Floating label background pill
+                        ctx.font = '11px Inter, sans-serif';
+                        const textWidth = ctx.measureText(labelText).width;
+                        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+                        ctx.fillRect(px - textWidth / 2 - 6, yAxis.top - 20, textWidth + 12, 20);
 
-                        // Add label text
-                        ctx.fillStyle = '#fff';
+                        // Label text
+                        ctx.fillStyle = lineColor;
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'middle';
-                        ctx.font = '12px Inter, sans-serif';
-                        ctx.fillText(text, pixelX, yAxis.top - 10);
-
+                        ctx.fillText(labelText, px, yAxis.top - 10);
                         ctx.restore();
+                    }
+
+                    // 1. White dashed line — current spot price
+                    drawPriceLine(
+                        getPricePixel(spotPrice),
+                        'rgba(255, 255, 255, 0.85)',
+                        `Spot: $${spotPrice.toFixed(2)}`
+                    );
+
+                    // 2. Orange dashed line — GEX flip level (if it exists within our ±15% window)
+                    if (flipStrike) {
+                        drawPriceLine(
+                            getPricePixel(flipStrike),
+                            '#fb923c',
+                            `GEX Flip: $${flipStrike.toFixed(2)}`
+                        );
                     }
                 }
             }]
+        });
+    }
+
+    // --- Intraday Price Sparkline ---
+    function renderSparkline(data) {
+        const sparkCtx = document.getElementById('sparklineChart').getContext('2d');
+
+        // Destroy previous instance to avoid memory leaks on repeated analyses
+        if (sparklineChart) {
+            sparklineChart.destroy();
+        }
+
+        const prices = data.historical_prices;
+        if (!prices || prices.length === 0) return;
+
+        const labels = prices.map(p => p.date);
+        const values = prices.map(p => p.price);
+
+        // Build a gradient fill beneath the line
+        const gradient = sparkCtx.createLinearGradient(0, 0, 0, 130);
+        gradient.addColorStop(0, 'rgba(56, 189, 248, 0.35)');
+        gradient.addColorStop(1, 'rgba(56, 189, 248, 0.0)');
+
+        // Calculate min/max with a small padding for a tight Y-axis
+        const minPrice = Math.min(...values);
+        const maxPrice = Math.max(...values);
+        const padding = (maxPrice - minPrice) * 0.15 || 1;
+
+        sparklineChart = new Chart(sparkCtx, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Price',
+                    data: values,
+                    borderColor: '#38bdf8',
+                    borderWidth: 2,
+                    pointRadius: 0,          // no dots — clean sparkline look
+                    pointHoverRadius: 4,
+                    tension: 0.4,            // smooth bezier curve
+                    fill: true,
+                    backgroundColor: gradient
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                        titleColor: '#94a3b8',
+                        bodyColor: '#f8fafc',
+                        borderColor: 'rgba(255,255,255,0.1)',
+                        borderWidth: 1,
+                        padding: 10,
+                        callbacks: {
+                            label: ctx => `$${ctx.parsed.y.toFixed(2)}`
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: {
+                            color: '#94a3b8',
+                            maxTicksLimit: 8,   // only show ~8 time labels to avoid clutter
+                            maxRotation: 0
+                        }
+                    },
+                    y: {
+                        min: minPrice - padding,
+                        max: maxPrice + padding,
+                        grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+                        ticks: {
+                            color: '#94a3b8',
+                            callback: v => `$${v.toFixed(0)}`
+                        }
+                    }
+                }
+            }
         });
     }
 });

@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Dict
+from typing import List, Optional
 
 class GexDataPoint(BaseModel):
     strike: float
@@ -17,6 +17,9 @@ class GexResponse(BaseModel):
     expiration_date: str
     gex_data: List[GexDataPoint]
     historical_prices: List[HistoricalPriceItem] = []
+    # The strike price at which cumulative GEX crosses zero — the key
+    # "GEX flip" level where dealer hedging behaviour changes direction.
+    gex_flip_strike: Optional[float] = None
     status: str = "success"
     message: str = ""
 

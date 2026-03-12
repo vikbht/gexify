@@ -66,6 +66,10 @@
                             <span class="label">Resistance:</span>
                             <span class="value" id="resistance-level">N/A</span>
                         </div>
+                        <div class="info-badge flip-badge">
+                            <span class="label">GEX Flip:</span>
+                            <span class="value" id="flip-level">N/A</span>
+                        </div>
 
                         <!-- Integrated Insight Banner -->
                         <div id="insight-banner" class="insight-banner hidden"
@@ -84,6 +88,14 @@
                         <canvas id="gexChart"></canvas>
                     </div>
 
+                    <!-- Intraday Price Sparkline -->
+                    <div class="sparkline-section">
+                        <p class="sparkline-label">📈 Intraday Price</p>
+                        <div class="sparkline-container">
+                            <canvas id="sparklineChart"></canvas>
+                        </div>
+                    </div>
+
                     <div class="legend-panel">
                         <div class="legend-item">
                             <div class="color-swatch call-swatch"></div>
@@ -99,7 +111,7 @@
         </main>
     </div>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=2"></script>
 </body>
 
 </html>

@@ -440,3 +440,37 @@ body {
     color: var(--text-secondary);
     line-height: 1.4;
 }
+
+/* --- GEX Flip Badge --- */
+.flip-badge .value {
+    color: #fb923c; /* orange — distinct from support (red) and resistance (green) */
+}
+
+/* --- Intraday Sparkline --- */
+.sparkline-section {
+    border-top: 1px solid var(--panel-border);
+    padding-top: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.sparkline-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.sparkline-container {
+    position: relative;
+    height: 130px;
+    width: 100%;
+}
+
+.sparkline-container canvas {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+}
