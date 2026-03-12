@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let gexChart = null;       // Chart.js instance for GEX bar chart
     let sparklineChart = null; // Chart.js instance for intraday price sparkline
+    let autoRefreshInterval = null; // Keeps track of the setInterval ID
     let dexVisible = true;     // Whether the DEX overlay is currently shown
 
     // DEX toggle button — show/hide the third dataset (index 2)
@@ -66,17 +67,53 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // --- Auto-Refresh Logic ---
+    const autoRefreshToggle = document.getElementById('auto-refresh-toggle');
+    const refreshGroup = document.querySelector('.auto-refresh-group');
+    
+    // Hide toggle initially until a successful search happens
+    refreshGroup.style.display = 'none';
+
+    autoRefreshToggle.addEventListener('change', (e) => {
+        if (e.target.checked) {
+            // Start polling every 60 seconds (60000 ms)
+            autoRefreshInterval = setInterval(() => {
+                if (tickerInput.value.trim() !== '') {
+                    // Trigger a background submit (we'll skip the heavy loading spinner to keep UX smooth)
+                    fetchGexData(true);
+                }
+            }, 60000);
+        } else {
+            // Stop polling
+            clearInterval(autoRefreshInterval);
+            autoRefreshInterval = null;
+        }
+    });
+
+    // Cleanup interval if user manually types a new ticker
+    tickerInput.addEventListener('input', () => {
+        autoRefreshToggle.checked = false;
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+        refreshGroup.style.display = 'none';
+    });
+
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
+        await fetchGexData(false);
+    });
 
+    async function fetchGexData(isAutoRefresh) {
         const ticker = tickerInput.value.trim().toUpperCase();
         if (!ticker) return;
 
-        // UI Reset & Loading State
-        setLoading(true);
-        errorBanner.classList.add('hidden');
-        resultsPanel.classList.remove('visible');
-        resultsPanel.classList.add('hidden');
+        // Only show the full screen blocking spinner if this is a manual, non-cached search
+        if (!isAutoRefresh) {
+            setLoading(true);
+            errorBanner.classList.add('hidden');
+            resultsPanel.classList.remove('visible');
+            resultsPanel.classList.add('hidden');
+        }
 
         try {
             const selectedExp = expirationSelect.value;
@@ -88,15 +125,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(data.detail || data.message || 'Failed to fetch GEX data');
             }
 
+            // Show the auto-refresh toggle now that we have valid data
+            refreshGroup.style.display = 'flex';
+            
             renderResults(data);
 
         } catch (error) {
             console.error("Error fetching GEX:", error);
+            // If auto-refresh fails, notify user and turn it off
+            if (isAutoRefresh) {
+                autoRefreshToggle.checked = false;
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+            }
             showError(error.message);
         } finally {
-            setLoading(false);
+            if (!isAutoRefresh) {
+                setLoading(false);
+            }
         }
-    });
+    }
 
     function setLoading(isLoading) {
         if (isLoading) {
