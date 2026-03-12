@@ -1,0 +1,15 @@
+[project]
+name = "gexify"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.133.1",
+    "numpy>=2.4.2",
+    "pandas>=3.0.1",
+    "pydantic>=2.12.5",
+    "scipy>=1.17.1",
+    "uvicorn>=0.41.0",
+    "yfinance>=1.2.0",
+]
