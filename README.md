@@ -9,21 +9,24 @@ Gexify is a web tool for options traders that fetches live options chain data, c
 ## ✨ Features
 
 - **Live GEX Chart** — Bar chart of Call GEX (positive) vs Put GEX (negative) per strike, filtered to ±15% of the current spot price
-- **Spot Price Line** — Dashed vertical line showing the current price on the chart
+- **Spot Price Line** — Dashed white vertical line showing the current price on the chart
+- **GEX Flip Level** — Computes the cumulative GEX zero-crossing strike (where dealer hedging behaviour reverses); shown as an orange dashed line on the chart and a badge in the header
+- **Intraday Price Sparkline** — Live price chart (5-min bars, full trading day) rendered below the GEX chart for immediate context
 - **Support & Resistance Detection** — Automatically identifies the strike with the highest put GEX (support) and call GEX (resistance)
 - **Market Regime Insight** — Tells you whether the market is in a Positive GEX (low vol/choppy) or Negative GEX (high vol/trending) regime
 - **Expiration Picker** — Dynamically loads available options expiration dates for any ticker
+- **Async Backend** — yfinance calls run in a thread pool executor so the FastAPI event loop is never blocked
 - **Dark Glassmorphism UI** — Clean, modern dark-mode interface built with vanilla JS + CSS
 
 ---
 
 ## 🎬 Demo
 
-> **Live analysis of SPY** — Spot: $676.33 | Expiry: 2026-03-12 | Regime: 🚀 Negative GEX (-0.04B)
+> **Live analysis of SPY** — Spot: $676.33 | Expiry: 2026-03-12 | GEX Flip: $637.00 | Regime: 🚀 Negative GEX (-0.04B)
 
 ![Gexify Demo Screenshot](docs/demo_screenshot.png)
 
-*The chart shows Call GEX (green bars) vs Put GEX (red bars) per strike price. The dashed white vertical line marks the current spot price. Support ($675) and Resistance ($680) are auto-detected from peak GEX concentrations.*
+*The chart shows Call GEX (green bars) vs Put GEX (red bars) per strike. The dashed white line marks the current spot price. The intraday sparkline (bottom) shows today's full price action from open to close.*
 
 📹 [Watch the full interactive demo recording](docs/demo.webp)
 
@@ -137,10 +140,13 @@ curl "http://localhost:8000/api/gex/SPY?expiration=2025-04-17"
 | 🟢 **Positive GEX (green bars)** | Call gamma — market makers hedge by selling into rallies (suppresses upside) |
 | 🔴 **Negative GEX (red bars)** | Put gamma — market makers hedge by buying dips (amplifies downside moves) |
 | **Dashed white line** | Current spot price |
+| **Dashed orange line** | GEX flip level — the strike where cumulative dealer net gamma crosses zero |
 | **Support badge** | Strike with the largest put GEX concentration |
 | **Resistance badge** | Strike with the largest call GEX concentration |
+| **GEX Flip badge** | The cumulative zero-crossing strike; below spot = bearish lean, above = bullish lean |
 | 🛡️ **Positive GEX Regime** | Total GEX > 0 → market makers suppress vol → expect range-bound / choppy price action |
 | 🚀 **Negative GEX Regime** | Total GEX < 0 → market makers amplify vol → expect large directional moves |
+| 📈 **Intraday Sparkline** | Full-day 5-min price bars for the analysed ticker — puts the GEX profile in context |
 
 ---
 
