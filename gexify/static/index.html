@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gexify - Gamma Exposure Visualizer</title>
+    <!-- Modern Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Vanilla CSS -->
+    <link rel="stylesheet" href="styles.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+    <div class="app-container">
+
+        <header class="hero">
+            <h1 class="gradient-text">Gexify</h1>
+            <p class="subtitle">Real-time Options Gamma Exposure (GEX) Profiling</p>
+        </header>
+
+        <main class="content-wrapper">
+            <section class="control-panel glass-panel">
+                <form id="ticker-form" class="search-form">
+                    <div class="input-group">
+                        <label for="ticker-input">Enter Ticker Symbols (Max 3):</label>
+                        <input type="text" id="ticker-input" placeholder="e.g. SPY, QQQ, AAPL" required
+                            autocomplete="off" spellcheck="false">
+                    </div>
+                    <div class="input-group expiration-group">
+                        <label for="expiration-select">Options Expiration (Optional):</label>
+                        <select id="expiration-select" disabled>
+                            <option value="">Auto-select Nearest</option>
+                        </select>
+                    </div>
+                    <button type="submit" id="analyze-btn" class="primary-btn">
+                        <span>Analyze GEX</span>
+                        <div class="spinner hidden" id="loading-spinner"></div>
+                    </button>
+                </form>
+            </section>
+
+            <div id="error-message" class="error-banner hidden"></div>
+
+            <section id="results-panel" class="results-panel hidden">
+                <div class="glass-panel main-panel">
+                    <div class="results-header">
+                        <div class="ticker-badge" id="display-ticker">SPY</div>
+                        <div class="info-badge">
+                            <span class="label">Spot Price:</span>
+                            <span class="value" id="spot-price-display">$0.00</span>
+                        </div>
+                        <div class="info-badge">
+                            <span class="label">Expiry:</span>
+                            <span class="value" id="expiration-display">N/A</span>
+                        </div>
+                        <div class="info-badge support-badge">
+                            <span class="label">Support:</span>
+                            <span class="value" id="support-level">N/A</span>
+                        </div>
+                        <div class="info-badge resistance-badge">
+                            <span class="label">Resistance:</span>
+                            <span class="value" id="resistance-level">N/A</span>
+                        </div>
+
+                        <!-- Integrated Insight Banner -->
+                        <div id="insight-banner" class="insight-banner hidden"
+                            style="margin-left: auto; margin-bottom: 0; padding: 0.5rem 1rem; border-radius: 8px; border-left: none; border-bottom: 3px solid transparent;">
+                            <div id="insight-icon" class="insight-icon" style="font-size: 1.4rem;">💡</div>
+                            <div class="insight-content">
+                                <h3 id="insight-title" class="insight-title"
+                                    style="font-size: 0.95rem; margin-bottom: 0;">Market State: Analyzing...</h3>
+                                <p id="insight-text" class="insight-text" style="font-size: 0.8rem;">Calculating optimal
+                                    strategy...</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="chart-container">
+                        <canvas id="gexChart"></canvas>
+                    </div>
+
+                    <div class="legend-panel">
+                        <div class="legend-item">
+                            <div class="color-swatch call-swatch"></div>
+                            <span><strong>Positive GEX (Calls)</strong></span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="color-swatch put-swatch"></div>
+                            <span><strong>Negative GEX (Puts)</strong></span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
