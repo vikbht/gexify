@@ -19,6 +19,7 @@ Gexify is a web tool for options traders that fetches live options chain data, c
 - **Async Backend** — yfinance calls run in a thread pool executor so the FastAPI event loop is never blocked
 - **Robust Error Handling & Validation** — Strict regex ticker validation, detailed API error messages, and graceful handling of closed-market periods
 - **Fast In-Memory Caching** — Uses `TTLCache` to store expensive option chains for 60 seconds, preventing Yahoo Finance rate limits and dropping API response times to 0.02s
+- **Vectorized Math Engine** — Uses pure `numpy` broadcasting to compute Black-Scholes Greeks across the entire options chain natively, optimizing computation times for multi-date views
 - **Dark Glassmorphism UI** — Clean, modern dark-mode interface built with vanilla JS + CSS featuring smooth fade-in animations
 
 ---
@@ -97,7 +98,7 @@ Then open [http://localhost:8000](http://localhost:8000) in your browser.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/api/gex/{ticker}/expirations` | List available options expiration dates with net GEX |
-| `GET` | `/api/gex/{ticker}?expiration=YYYY-MM-DD` | Full GEX profile for a ticker |
+| `GET` | `/api/gex/{ticker}` | Returns GEX profiles. Query params: `view_mode` (`single`, `term_structure`, `total`) and `expiration` |
 
 ### Example Response Fields
 
@@ -105,7 +106,18 @@ Then open [http://localhost:8000](http://localhost:8000) in your browser.
 {
   "ticker": "SPY",
   "spot_price": 676.33,
-  "gex_data": [{ "strike": 675, "call_gex": 1.2e9, "put_gex": -0.8e9, "total_gex": 0.4e9 }],
+  "expiration_date": "2026-03-25",
+  "gex_data": [
+    { 
+      "strike": 675.0, 
+      "call_gex": 1.2e9, 
+      "put_gex": -0.8e9, 
+      "total_gex": 0.4e9,
+      "date": "2026-03-25", // Included in Term Structure view
+      "dom_call_strike": 680.0, // Highest call gamma strike (Term Structure)
+      "dom_put_strike": 670.0 // Highest put gamma strike (Term Structure)
+    }
+  ],
   "historical_prices": [{ "date": "09:30", "price": 678.1 }],
   "gex_flip_strike": 637.0
 }
