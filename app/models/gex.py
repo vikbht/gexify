@@ -6,6 +6,9 @@ class GexDataPoint(BaseModel):
     call_gex: float
     put_gex: float
     total_gex: float
+    date: Optional[str] = None
+    dom_call_strike: Optional[float] = None
+    dom_put_strike: Optional[float] = None
 
 class HistoricalPriceItem(BaseModel):
     date: str
@@ -24,7 +27,11 @@ class GexResponse(BaseModel):
 
 class ExpirationDetail(BaseModel):
     date: str
+    call_gex: float = 0.0
+    put_gex: float = 0.0
     net_gex: float
+    dom_call_strike: Optional[float] = None
+    dom_put_strike: Optional[float] = None
 
 class ExpirationResponse(BaseModel):
     ticker: str

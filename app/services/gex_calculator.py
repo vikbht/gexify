@@ -87,38 +87,43 @@ def fetch_term_structure(ticker_symbol: str) -> ExpirationResponse:
                 # Time to expiration in fractional years
                 T = max(days_to_expiration / 365.25, 0.001)
                 
-                total_gex = 0.0
+                total_call_gex = 0.0
+                total_put_gex = 0.0
+                dom_call_strike = None
+                dom_put_strike = None
 
-                # Sum Call GEX
+                # Vectorized Call GEX
                 if not calls.empty:
-                    for _, row in calls.iterrows():
-                        K = row['strike']
-                        sigma = row['impliedVolatility']
-                        oi = row['openInterest']
-                        if pd.isna(oi) or oi == 0: continue
-                        if pd.isna(sigma) or sigma <= 0: continue
-
-                        gamma = calculate_gamma(spot_price, K, T, r, sigma)
+                    valid_calls = calls[(calls['openInterest'] > 0) & (calls['impliedVolatility'] > 0)]
+                    if not valid_calls.empty:
+                        K = valid_calls['strike'].values
+                        sigma = valid_calls['impliedVolatility'].values
+                        oi = valid_calls['openInterest'].values
+                        gamma = calculate_gamma_vectorized(spot_price, K, T, r, sigma)
                         call_gex = gamma * oi * 100 * spot_price
-                        total_gex += call_gex
+                        total_call_gex = float(np.sum(call_gex))
+                        if len(call_gex) > 0:
+                            dom_call_strike = float(K[np.argmax(call_gex)])
 
-                # Sum Put GEX
+                # Vectorized Put GEX
                 if not puts.empty:
-                    for _, row in puts.iterrows():
-                        K = row['strike']
-                        sigma = row['impliedVolatility']
-                        oi = row['openInterest']
-                        if pd.isna(oi) or oi == 0: continue
-                        if pd.isna(sigma) or sigma <= 0: continue
-
-                        gamma = calculate_gamma(spot_price, K, T, r, sigma)
+                    valid_puts = puts[(puts['openInterest'] > 0) & (puts['impliedVolatility'] > 0)]
+                    if not valid_puts.empty:
+                        K = valid_puts['strike'].values
+                        sigma = valid_puts['impliedVolatility'].values
+                        oi = valid_puts['openInterest'].values
+                        gamma = calculate_gamma_vectorized(spot_price, K, T, r, sigma)
                         put_gex = gamma * oi * 100 * spot_price * -1
-                        total_gex += put_gex
+                        total_put_gex = float(np.sum(put_gex))
+                        if len(put_gex) > 0:
+                            # Puts are negative, so we want argmin to find the largest absolute put GEX
+                            dom_put_strike = float(K[np.argmin(put_gex)])
                 
-                return ExpirationDetail(date=exp_date, net_gex=total_gex)
+                total_gex = total_call_gex + total_put_gex
+                return ExpirationDetail(date=exp_date, call_gex=total_call_gex, put_gex=total_put_gex, net_gex=total_gex, dom_call_strike=dom_call_strike, dom_put_strike=dom_put_strike)
             except Exception as e:
                 # If a single chain fails to load, just return 0 GEX so we don't break the whole list
-                return ExpirationDetail(date=exp_date, net_gex=0.0)
+                return ExpirationDetail(date=exp_date, call_gex=0.0, put_gex=0.0, net_gex=0.0)
 
         # Concurrently fetch all chains
         with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:

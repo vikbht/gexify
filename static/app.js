@@ -115,7 +115,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // View Mode Toggle Logic
     viewModeRadios.forEach(radio => {
         radio.addEventListener('change', (e) => {
-            if (e.target.value === 'total') {
+            const multiDateModes = ['total', 'term_structure'];
+            if (multiDateModes.includes(e.target.value)) {
                 expirationSelect.disabled = true;
             } else {
                 // Only enable if there are options and a ticker is entered
@@ -213,8 +214,17 @@ document.addEventListener('DOMContentLoaded', () => {
         // Update GEX Flip badge (orange) — null if no zero-crossing found in filtered window
         flipLevel.textContent = data.gex_flip_strike ? `$${data.gex_flip_strike.toFixed(2)}` : 'N/A';
 
-        // Render GEX chart immediately
-        renderChart(data);
+        // Render Chart
+        const viewMode = Array.from(viewModeRadios).find(r => r.checked)?.value || 'single';
+        const chartjsContainer = document.getElementById('chartjs-container');
+        
+        if (viewMode === 'term_structure') {
+            chartjsContainer.classList.remove('hidden');
+            renderTermStructureChart(data);
+        } else {
+            chartjsContainer.classList.remove('hidden');
+            renderChart(data);
+        }
         // Reveal panel with fade-in: remove hidden first (sets display), then
         // add .visible one frame later so the CSS transition has something to animate from.
         resultsPanel.classList.remove('hidden');
@@ -269,6 +279,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         // Update UI Badges
+        document.getElementById('badge-support').style.display = '';
+        document.getElementById('badge-resistance').style.display = '';
+        document.getElementById('badge-flip').style.display = '';
         supportLevel.textContent = supportStrike ? `$${supportStrike.toFixed(2)}` : 'N/A';
         resistanceLevel.textContent = resistanceStrike ? `$${resistanceStrike.toFixed(2)}` : 'N/A';
 
@@ -302,6 +315,60 @@ document.addEventListener('DOMContentLoaded', () => {
         const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         lastRefreshedSpan.textContent = `Last Refreshed: ${timeString}`;
         lastRefreshedSpan.classList.remove('hidden');
+    }
+
+
+
+    function renderTermStructureChart(data) {
+        const ctx = document.getElementById('gexChart').getContext('2d');
+        if (gexChart) gexChart.destroy();
+        
+        const billionScale = 1_000_000_000;
+        const labels = data.gex_data.map(d => d.date);
+        const callGexData = data.gex_data.map(d => d.call_gex / billionScale);
+        const putGexData = data.gex_data.map(d => d.put_gex / billionScale);
+        
+        gexChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'Call GEX', data: callGexData, backgroundColor: 'rgba(34, 197, 94, 0.7)', borderColor: '#22c55e', borderWidth: 1, yAxisID: 'y' },
+                    { label: 'Put GEX', data: putGexData, backgroundColor: 'rgba(239, 68, 68, 0.7)', borderColor: '#ef4444', borderWidth: 1, yAxisID: 'y' }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: {
+                    x: { stacked: true, grid: { color: 'rgba(255, 255, 255, 0.05)', drawBorder: false }, ticks: { color: '#94a3b8', maxRotation: 45, minRotation: 45 } },
+                    y: { stacked: false, grid: { color: (c) => c.tick.value === 0 ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.05)', lineWidth: (c) => c.tick.value === 0 ? 2 : 1 }, ticks: { color: '#94a3b8', callback: (v) => v === 0 ? '0B' : v.toFixed(2) + 'B' } }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { 
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)', 
+                        titleColor: '#f8fafc', 
+                        bodyColor: '#e2e8f0', 
+                        callbacks: { 
+                            label: function(c) { return `${c.dataset.label}: ${c.parsed.y.toFixed(2)}B`; },
+                            afterLabel: function(c) {
+                                const dp = data.gex_data[c.dataIndex];
+                                if (c.datasetIndex === 0 && dp.dom_call_strike) {
+                                    return `Top Strike: $${dp.dom_call_strike.toFixed(2)}`;
+                                } else if (c.datasetIndex === 1 && dp.dom_put_strike) {
+                                    return `Top Strike: $${dp.dom_put_strike.toFixed(2)}`;
+                                }
+                                return '';
+                            }
+                        } 
+                    }
+                }
+            }
+        });
+        document.getElementById('badge-support').style.display = 'none';
+        document.getElementById('badge-resistance').style.display = 'none';
+        document.getElementById('badge-flip').style.display = 'none';
+        document.getElementById('insight-banner').className = 'insight-banner hidden';
     }
 
     function renderGexChart(ctx, labels, callGexData, putGexData, spotPrice, flipStrike, gridColor, textColor) {

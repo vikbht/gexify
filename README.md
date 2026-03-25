@@ -8,11 +8,12 @@ Gexify is a web tool for options traders that fetches live options chain data, c
 
 ## ✨ Features
 
-- **Live GEX Chart** — Bar chart of Call GEX (positive) vs Put GEX (negative) per strike, filtered to ±15% of spot on the backend for optimal performance
+- **Live GEX Chart** — Bar chart of Call GEX (positive) vs Put GEX (negative) per strike, filtered to the closest ±20 strikes from spot for optimal clarity
 - **Spot Price Line** — Dashed white vertical line marking the current price on the chart
 - **GEX Flip Level** — Cumulative GEX zero-crossing strike (dealer gamma reversal); shown as an orange dashed line + badge
 - **Support & Resistance Detection** — Auto-identifies the peak put GEX strike (support) and peak call GEX strike (resistance)
 - **Market Regime Insight** — Positive GEX (low vol / range-bound) or Negative GEX (high vol / directional) signal
+- **Term Structure Timeline** — Swap the view to plot GEX by expiration date, automatically surfacing the dominant strike for each date directly in the tooltips
 - **Term Structure Heatmap** — Expiration dropdown dynamically colors dates with Emojis (🔴/🟢) and displays exact Net GEX values in Billions, giving an instant macro-view of the options flow
 - **Auto-Refresh Toggle** — Keeps the dashboard live by silently polling background data every 60 seconds
 - **Async Backend** — yfinance calls run in a thread pool executor so the FastAPI event loop is never blocked
@@ -22,11 +23,6 @@ Gexify is a web tool for options traders that fetches live options chain data, c
 
 ---
 
-## 📸 Screenshot
-
-![Gexify Screenshot](docs/demo_screenshot.png)
-
----
 
 ## 🧮 How GEX Is Calculated
 
@@ -144,6 +140,8 @@ Then open [http://localhost:8000](http://localhost:8000) in your browser.
 | 🛡️ **Positive GEX Regime** | Total GEX > 0 → vol suppressed → range-bound / choppy |
 | 🚀 **Negative GEX Regime** | Total GEX < 0 → vol amplified → expect large directional moves |
 | ⏱️ **Auto-Refresh Toggle** | When enabled, silently updates the backend data every 60 seconds |
+| 📅 **Term Structure View** | Toggling the Data Scope plots Expirations (X-axis) against Net GEX (Y-axis), revealing major OPEX walls |
+| 📍 **Dominant Strike Tooltip** | Hovering over Term Structure bars reveals the specific strike anchoring that date's GEX concentration |
 | 🔥 **Term Structure Heatmap** | Shows the Net GEX value in Billions for the next 30+ expiration dates in the dropdown |
 
 ---

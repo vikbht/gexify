@@ -47,10 +47,8 @@ async def get_gex(
     try:
         if view_mode == "total":
             logger.info("Total Market Mode: Fetching history and aggregating all option chains.")
-            # History is still required for spot price and sparkline
             spot_price, historical_prices = await loop.run_in_executor(None, fetch_history_sync, ticker)
             
-            # Run the heavy concurrent array-math function in the process pool
             response = await loop.run_in_executor(
                 None,
                 compute_total_market_gex,
@@ -58,6 +56,24 @@ async def get_gex(
             )
             return response
             
+        elif view_mode == "term_structure":
+            logger.info("Term Structure Mode")
+            spot_price, historical_prices = await loop.run_in_executor(None, fetch_history_sync, ticker)
+            term_resp = await loop.run_in_executor(None, fetch_term_structure, ticker)
+            
+            from app.models.gex import GexDataPoint
+            gex_data = []
+            for exp in term_resp.expirations:
+                # Use strike=0 as a dummy value since we are plotting by date
+                gex_data.append(GexDataPoint(
+                    strike=0, call_gex=exp.call_gex, put_gex=exp.put_gex, total_gex=exp.net_gex, date=exp.date,
+                    dom_call_strike=exp.dom_call_strike, dom_put_strike=exp.dom_put_strike
+                ))
+            
+            return GexResponse(
+                ticker=ticker, spot_price=spot_price, expiration_date="Term Structure",
+                gex_data=gex_data, historical_prices=historical_prices, gex_flip_strike=None
+            )
         else:
             # Original Single Expiration Logic
             history_task = loop.run_in_executor(None, fetch_history_sync, ticker)

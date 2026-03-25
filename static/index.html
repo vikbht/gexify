@@ -33,12 +33,15 @@
                     </div>
                     <div class="input-group expiration-group">
                         <label>Data Scope:</label>
-                        <div class="toggle-pills">
+                        <div class="toggle-pills" style="display: flex; flex-wrap: wrap;">
                             <input type="radio" id="mode-single" name="view_mode" value="single" checked>
                             <label for="mode-single">Single Expiry</label>
                             
+                            <input type="radio" id="mode-term" name="view_mode" value="term_structure">
+                            <label for="mode-term">Term Structure</label>
+                            
                             <input type="radio" id="mode-total" name="view_mode" value="total">
-                            <label for="mode-total">Total Market</label>
+                            <label for="mode-total">Total (Strikes)</label>
                         </div>
                         <select id="expiration-select" disabled>
                             <option value="">Auto-select Nearest</option>
@@ -83,15 +86,15 @@
                             <span class="label">Expiry:</span>
                             <span class="value" id="expiration-display">N/A</span>
                         </div>
-                        <div class="info-badge support-badge">
+                        <div id="badge-support" class="info-badge support-badge">
                             <span class="label">Support:</span>
                             <span class="value" id="support-level">N/A</span>
                         </div>
-                        <div class="info-badge resistance-badge">
+                        <div id="badge-resistance" class="info-badge resistance-badge">
                             <span class="label">Resistance:</span>
                             <span class="value" id="resistance-level">N/A</span>
                         </div>
-                        <div class="info-badge flip-badge">
+                        <div id="badge-flip" class="info-badge flip-badge">
                             <span class="label">GEX Flip:</span>
                             <span class="value" id="flip-level">N/A</span>
                         </div>
@@ -109,7 +112,7 @@
                         </div>
                     </div>
 
-                    <div class="chart-container">
+                    <div id="chartjs-container" class="chart-container">
                         <canvas id="gexChart"></canvas>
                     </div>
 
@@ -147,7 +150,7 @@
         </main>
     </div>
 
-    <script src="app.js?v=10"></script>
+    <script src="app.js?v=13"></script>
 </body>
 
 </html>
