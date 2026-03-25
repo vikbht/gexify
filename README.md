@@ -6,6 +6,19 @@ Gexify is a web tool for options traders that fetches live options chain data, c
 
 ---
 
+## 📸 Screenshots
+
+### Single Expiry Mode
+![Single Expiry](docs/view_single.png)
+
+### Term Structure Timeline
+![Term Structure](docs/view_term.png)
+
+### Total Market View
+![Total Market](docs/view_total.png)
+
+---
+
 ## ✨ Features
 
 - **Live GEX Chart** — Bar chart of Call GEX (positive) vs Put GEX (negative) per strike, filtered to the closest ±20 strikes from spot for optimal clarity
