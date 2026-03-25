@@ -344,14 +344,20 @@ def compute_gex_profile(ticker_symbol: str, spot_price: float, historical_prices
         puts = puts[puts['impliedVolatility'].gt(0) & puts['impliedVolatility'].notna()].copy()
 
         # --- Step 5: Calculate per-row Gamma using Black-Scholes ---
-        calls['Gamma'] = calls.apply(
-            lambda row: calculate_gamma(spot_price, row['strike'], T, r, row['impliedVolatility']),
-            axis=1
-        )
-        puts['Gamma'] = puts.apply(
-            lambda row: calculate_gamma(spot_price, row['strike'], T, r, row['impliedVolatility']),
-            axis=1
-        )
+        # Utilizing fast Numpy vectorized calculations native to the CPU
+        if not calls.empty:
+            calls['Gamma'] = calculate_gamma_vectorized(
+                spot_price, calls['strike'].values, T, r, calls['impliedVolatility'].values
+            )
+        else:
+            calls['Gamma'] = 0.0
+            
+        if not puts.empty:
+            puts['Gamma'] = calculate_gamma_vectorized(
+                spot_price, puts['strike'].values, T, r, puts['impliedVolatility'].values
+            )
+        else:
+            puts['Gamma'] = 0.0
 
         # --- Step 6: Convert Gamma → GEX (dollar-denominated) ---
         # Multiplying by 100 accounts for standard US equity option contract size (100 shares)
@@ -386,12 +392,16 @@ def compute_gex_profile(ticker_symbol: str, spot_price: float, historical_prices
         gex_flip_strike = find_flip_strike(sorted_profile['Total_GEX'])
 
         # --- Step 9: Serialize to Pydantic response models ---
-        # Filter to ±15% of spot price to reduce wire size.
-        lower_bound = spot_price * 0.85
-        upper_bound = spot_price * 1.15
-        filtered_profile = gex_profile[
-            (gex_profile.index >= lower_bound) & (gex_profile.index <= upper_bound)
-        ]
+        # Filter to +/- 20 strikes closest to the spot price.
+        strikes = sorted_profile.index.values
+        if len(strikes) > 0:
+            closest_idx = np.abs(strikes - spot_price).argmin()
+            start_idx = max(0, closest_idx - 20)
+            end_idx = min(len(strikes), closest_idx + 21)
+            valid_strikes = strikes[start_idx:end_idx]
+            filtered_profile = sorted_profile.loc[valid_strikes]
+        else:
+            filtered_profile = sorted_profile
 
         gex_data = [
             GexDataPoint(
