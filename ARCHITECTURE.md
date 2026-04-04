@@ -88,6 +88,7 @@ Focuses on concurrency, synchronization, and runtime behavior.
 Focuses on the software management environment and module organization.
 - **Package Manager**: Built entirely on Astral's `uv` for ultra-fast, deterministic dependency resolution (via `pyproject.toml` and `uv.lock`).
 - **Structure**: Separation of concerns (`app/api/endpoints.py` for routing, `app/models/gex.py` for strictly-typed schemas, `app/services/gex_calculator.py` for math, `static/` for client assets).
+- **Test Suite**: A `pytest` framework leverages `httpx` and `pytest-asyncio` against a FastAPI `TestClient`, while `unittest.mock` strictly isolates external Yahoo Finance network calls to maintain deterministic CI speeds.
 
 ### 2.4 Physical View (For DevOps)
 Focuses on the topological layout and deployment infrastructure.

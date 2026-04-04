@@ -104,6 +104,14 @@ uv run uvicorn app.main:app --reload
 
 Then open [http://localhost:8000](http://localhost:8000) in your browser.
 
+### Running Tests
+
+Gexify includes a `pytest` suite covering API routing, payload validation, and Black-Scholes calculations.
+
+```bash
+uv run pytest -v
+```
+
 ---
 
 ## 🔌 API Endpoints
